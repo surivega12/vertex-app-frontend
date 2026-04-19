@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "VERTƎX Premium",
+    "slug": "vertex-app",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.suriyamki.vertex"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26,
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "buildToolsVersion": "34.0.0"
+          }
+        }
+      ],
+      "react-native-video",
+      [
+        "@react-native-voice/voice",
+        {
+          "microphonePermission": "VERTƎX necesita acceso al micrófono para que puedas buscar películas y series usando tu voz.",
+          "speechRecognitionPermission": "VERTƎX necesita conectarse al reconocedor de voz nativo para transcribir lo que dictas en el buscador."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d56f32cc-cfd0-45d6-8120-fbd0b5c20b16"
+      }
+    }
+  }
+}
