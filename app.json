@@ -4,21 +4,11 @@
     "slug": "vertex-app",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#000000"
-    },
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#000000"
-      },
       "package": "com.suriyamki.vertex",
       "permissions": [
         "android.permission.RECORD_AUDIO"
@@ -26,7 +16,6 @@
     },
     "plugins": [
       "expo-font",
-      "expo-secure-store",
       [
         "expo-build-properties",
         {
