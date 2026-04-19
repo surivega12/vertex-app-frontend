@@ -7,7 +7,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "postinstall": "node fix-voice.js"
+    "postinstall": "node fix-voice.js",
+    "eas-build-pre-build": "sed -i 's/gradle-9.0.0-bin.zip/gradle-8.8-all.zip/g' android/gradle/wrapper/gradle-wrapper.properties"
   },
   "dependencies": {
     "@expo/config-plugins": "~9.0.0",
