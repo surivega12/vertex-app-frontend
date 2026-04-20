@@ -27,7 +27,7 @@
     "@babel/core": "^7.20.0"
   },
   "overrides": {
-    "expo-modules-core": "1.12.29",
+    "expo-modules-core": "~1.12.0",
     "@expo/config-plugins": "~8.0.0"
   },
   "private": true
