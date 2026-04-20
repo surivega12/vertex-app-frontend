@@ -31,8 +31,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "d56f32cc-cfd0-45d6-8120-fbd0b5c20b16"
+        "projectId": "e8d6524f-5021-4866-8276-6f53ac886aaa"
       }
-    }
+    },
+    "owner": "yamki0"
   }
 }

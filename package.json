@@ -15,7 +15,7 @@
     "expo-build-properties": "~0.12.5",
     "expo-dev-client": "~4.0.26",
     "expo-font": "~12.0.9",
-    "expo-image": "~1.13.0",
+    "expo-image": "~1.12.15",
     "expo-secure-store": "~13.0.2",
     "expo-status-bar": "~1.12.1",
     "react": "18.2.0",
@@ -24,8 +24,11 @@
     "react-native-video": "^6.0.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0",
-    "@expo/config-plugins": "^8.0.0"
+    "@babel/core": "^7.20.0"
+  },
+  "overrides": {
+    "expo-modules-core": "1.12.29",
+    "@expo/config-plugins": "~8.0.0"
   },
   "private": true
 }
