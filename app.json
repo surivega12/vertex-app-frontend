@@ -21,19 +21,17 @@
         {
           "android": {
             "minSdkVersion": 26,
-            "compileSdkVersion": 35,
+            "compileSdkVersion": 34,
             "targetSdkVersion": 34,
             "buildToolsVersion": "34.0.0"
           }
         }
-      ],
-      "react-native-video"
+      ]
     ],
     "extra": {
       "eas": {
-        "projectId": "e8d6524f-5021-4866-8276-6f53ac886aaa"
+        "projectId": "d56f32cc-cfd0-45d6-8120-fbd0b5c20b16"
       }
-    },
-    "owner": "yamki0"
+    }
   }
 }
