@@ -1,45 +1,74 @@
 import 'react-native-gesture-handler';
 import React, { useState, useRef, useEffect, createContext, useContext, useCallback } from 'react';
-// 🔥 React Native (Unificado) 🔥
 import { View, Text, StyleSheet, Animated, Pressable, StatusBar, ImageBackground, Image, ScrollView, FlatList, TouchableOpacity, TextInput, Platform, useWindowDimensions, Modal, Linking, Alert, ActivityIndicator, Switch, ToastAndroid, BackHandler } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import Voice from '@react-native-voice/voice';
+
 // Navegación
 import { NavigationContainer, DarkTheme, useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
-import { createDrawerNavigator, DrawerContentScrollView } from '@react-navigation/drawer';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-// Gestos y UI
-import { PanGestureHandler, TapGestureHandler, State, GestureHandlerRootView } from 'react-native-gesture-handler';
+// UI y Web Safe
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons, Ionicons, Octicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import ImageColors from 'react-native-image-colors';
-// Multimedia y Hardware
-import Video from 'react-native-video';
-import * as ScreenOrientation from 'expo-screen-orientation';
-import * as Brightness from 'expo-brightness';
-
-// LIBRERÍAS DE DESCARGA Y SISTEMA
-import * as FileSystem from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
-import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
-import * as Network from 'expo-network';
-import * as Application from 'expo-application';
-import * as Device from 'expo-device';
-SplashScreen.preventAutoHideAsync(); // Mantenemos la pantalla de carga cerrada con llave
 
-// 🔥 CONFIGURACIÓN: Cómo se comportan las notificaciones en el celular 🔥
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-    }),
-});
+// 🛑 ESCUDO ANTI-EXPO GO: Cargamos lo móvil solo si NO es web
+let Voice, FileSystem, MediaLibrary, Notifications, Brightness, ScreenOrientation, Application, Device, Network, Video;
+
+if (Platform.OS !== 'web') {
+    Voice = require('@react-native-voice/voice').default;
+    FileSystem = require('expo-file-system');
+    MediaLibrary = require('expo-media-library');
+    Notifications = require('expo-notifications');
+    Brightness = require('expo-brightness');
+    ScreenOrientation = require('expo-screen-orientation');
+    Application = require('expo-application');
+    Device = require('expo-device');
+    Network = require('expo-network');
+
+    // 🔥 EL MOTOR ORIGINAL: Solo se carga en celulares 🔥
+    // Video = require('react-native-video').default;
+
+    Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+        }),
+    });
+} else {
+    // 🔥 EL MOTOR WEB PURO (HTML5) CON TRADUCTOR DE CONTROLES 🔥
+    Video = React.forwardRef(({ source, style, paused, onProgress, onLoad, resizeMode }, ref) => {
+        const internalRef = useRef(null);
+
+        // Puente para que el Slider de React Native pueda adelantar el video web
+        React.useImperativeHandle(ref, () => ({
+            seek: (time) => {
+                if (internalRef.current) internalRef.current.currentTime = time;
+            }
+        }));
+
+        const objectFit = resizeMode === 'cover' ? 'cover' : (resizeMode === 'stretch' ? 'fill' : 'contain');
+
+        return (
+            <video
+                ref={internalRef}
+                src={source?.uri}
+                style={{ ...style, objectFit, width: '100%', height: '100%', outline: 'none', backgroundColor: '#000' }}
+                autoPlay={!paused}
+                controls={false}
+                onTimeUpdate={(e) => onProgress && onProgress({ currentTime: e.target.currentTime })}
+                onLoadedMetadata={(e) => onLoad && onLoad({ duration: e.target.duration })}
+            />
+        );
+    });
+}
 // ==========================================
 // CONSTANTES Y VARIABLES GLOBALES
 // ==========================================
@@ -49,10 +78,11 @@ const RootStack = createNativeStackNavigator();
 const PREMIUM_GOLD = '#c1915f';
 const INACTIVE_ICON = '#888888';
 
-const BACKEND_URL = 'http://192.168.0.128:5000';
-const ADMIN_MASTER_KEY = 'Suri.yamki07';
-const JELLYFIN_URL = "https://33.ein.itsby.design/yamki07/jellyfin";
-const JELLYFIN_API_KEY = "9cb0f14220fe41798b8077ad0ccbd10a";
+// Llamamos a las variables de entorno de forma segura
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+const ADMIN_MASTER_KEY = process.env.EXPO_PUBLIC_ADMIN_MASTER_KEY;
+const JELLYFIN_URL = process.env.EXPO_PUBLIC_JELLYFIN_URL;
+const JELLYFIN_API_KEY = process.env.EXPO_PUBLIC_JELLYFIN_API_KEY;
 
 const FALLBACK_HERO = [
     { id: 'h1', title: "PEAKY BLINDERS\nTHE IMMORTAL MAN", year: "2026", rating: "R", lang: "Latino", genres: "Crimen • Drama", overview: "Después de que su hijo distanciado se vea envuelto en un complot nazi, el gánster autoexiliado Tommy Shelby debe regresar a Birmingham.", bgImage: "https://image.tmdb.org/t/p/original/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", thumb: "https://image.tmdb.org/t/p/w500/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", studio: "Netflix", imdb: "7.4", type: "movie" },
@@ -110,7 +140,7 @@ export const AppProvider = ({ children }) => {
     const [history, setHistory] = useState([]);
     const [completedDownloads, setCompletedDownloads] = useState([]);
     // FIX 2: Dejamos un usuario vacío por defecto hasta que Django nos diga quién es
-    const [user, setUser] = useState({ name: "", photo: "https://i.pravatar.cc/150", status: "Usuario Gratuito", vipDays: 0, downloadLimit: 1 });
+    const [user, setUser] = useState({ name: "", photo: "", status: "Usuario Gratuito", vipDays: 0, downloadLimit: 1 });
     const [jellyfinMovies, setJellyfinMovies] = useState([]);
     const [offset, setOffset] = useState(0);
 
@@ -121,9 +151,14 @@ export const AppProvider = ({ children }) => {
     useEffect(() => {
         const initApp = async () => {
             try {
-                // 1. VERIFICACIÓN DE RED
-                const networkState = await Network.getNetworkStateAsync();
-                const hasInternet = networkState.isConnected && networkState.isInternetReachable;
+                // 1. VERIFICACIÓN DE RED HÍBRIDA (Móvil y Web)
+                let hasInternet = true;
+                if (Platform.OS !== 'web' && Network) {
+                    const networkState = await Network.getNetworkStateAsync();
+                    hasInternet = networkState.isConnected && networkState.isInternetReachable;
+                } else if (Platform.OS === 'web') {
+                    hasInternet = navigator.onLine; // Usamos el motor nativo del navegador
+                }
 
                 // 2. Leer la Bóveda Local (Caché)
                 const cw = await AsyncStorage.getItem('vertex_cw');
@@ -284,11 +319,10 @@ export const AppProvider = ({ children }) => {
                 const pathString = item.Path ? item.Path.toLowerCase() : "";
                 const titleString = finalCleanTitle.toLowerCase();
 
-                // La app ahora lee directamente la ruta de la carpeta que creaste en tu servidor
-                const isAnime = pathString.includes("/animes/");
-                const isNovel = pathString.includes("/novelas/");
+                // 🔥 BÚSQUEDA MÁS AGRESIVA: Ignora las barras (/) o (\) de Windows/Linux
+                const isAnime = pathString.includes("anime") || genresString.includes("anime") || tagsString.includes("anime");
+                const isNovel = pathString.includes("novela") || genresString.includes("novela") || tagsString.includes("novela") || pathString.includes("dorama");
 
-                // La animación se puede dejar por géneros para películas de Disney, etc.
                 const isAnimacion = genresString.includes("animación") || genresString.includes("animacion") || genresString.includes("family") || genresString.includes("kids") || isAnime || genresString.includes("animation");
 
                 // Lógica de Series
@@ -715,7 +749,7 @@ const MobileBottomBar = ({ currentRoute }) => {
 
             <View style={styles.mobileBarItems}>
                 <BottomTab icon="home-variant" label="Inicio" active={currentRoute === 'Inicio'} onPress={() => navigation.navigate('Inicio')} />
-                <BottomTab icon="folder-play-outline" label="Bóveda" active={currentRoute === 'Mi Espacio'} onPress={() => navigation.navigate('Mi Espacio')} />
+                <BottomTab icon="play-box-outline" label="Bóveda" active={currentRoute === 'Mi Espacio'} onPress={() => navigation.navigate('Mi Espacio')} />
                 <BottomTab icon="compass-outline" label="Descubrir" active={currentRoute === 'Buscar'} onPress={() => navigation.navigate('Buscar')} />
                 <BottomTab icon="account-circle-outline" label="Usuario" active={currentRoute === 'Usuario'} onPress={() => navigation.navigate('Usuario')} />
             </View>
@@ -723,25 +757,38 @@ const MobileBottomBar = ({ currentRoute }) => {
     );
 };
 
-const FocusableMovieCard = ({ movie, isMobile, onPress, onFocusChange, customStyle }) => {
+const FocusableMovieCard = ({ movie, isMobile, onPress, onFocusChange, customStyle, forceWidth, forceHeight }) => {
     const [isFocused, setIsFocused] = useState(false);
     const [imgError, setImgError] = useState(false);
 
     const handleFocus = () => { setIsFocused(true); if (onFocusChange && !isMobile) onFocusChange(movie); };
     const handleBlur = () => setIsFocused(false);
 
+    const imageUrl = imgError || !movie.thumb ? movie.tmdbThumb : movie.thumb;
+    const isPlaceholder = !imageUrl || imageUrl.includes('placeholder') || imgError;
+
+    // 🔥 TAMAÑOS DINÁMICOS: Si la vista pide un tamaño forzado (como la cuadrícula), lo usa.
+    const cardWidth = forceWidth || (isMobile ? 110 : 125);
+    const cardHeight = forceHeight || (isMobile ? 165 : 185);
+
     return (
-        <View style={[{ width: isMobile ? 110 : 130, marginRight: 15, marginBottom: 15 }, customStyle, { height: 'auto', backgroundColor: 'transparent' }]}>
+        <View style={[{ width: cardWidth, marginRight: 15, marginBottom: 15 }, customStyle, { height: 'auto', backgroundColor: 'transparent' }]}>
             <Pressable
                 onPress={() => onPress && onPress(movie)}
                 onFocus={handleFocus} onBlur={handleBlur} onHoverIn={handleFocus} onHoverOut={handleBlur}
-                style={[styles.posterCard, { width: '100%', marginRight: 0, marginBottom: 0 }, isFocused && { borderColor: PREMIUM_GOLD, borderWidth: 3, transform: [{ scale: 1.05 }], zIndex: 10 }]}
+                style={[styles.posterCard, { width: '100%', height: cardHeight, marginRight: 0, marginBottom: 0 }, isFocused && { borderColor: PREMIUM_GOLD, borderWidth: 3, transform: [{ scale: 1.05 }], zIndex: 10 }]}
             >
-                <ExpoImage source={{ uri: imgError || !movie.thumb ? movie.tmdbThumb : movie.thumb }} style={styles.posterImage} contentFit="cover" transition={300} onError={() => setImgError(true)} />
+                {!isPlaceholder ? (
+                    <ExpoImage source={{ uri: imageUrl }} style={styles.posterImage} contentFit="cover" transition={300} onError={() => setImgError(true)} />
+                ) : (
+                    <View style={{ flex: 1, backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center', padding: 10, borderWidth: 1, borderColor: '#333' }}>
+                        <Ionicons name="film-outline" size={24} color="rgba(193, 145, 95, 0.4)" style={{ marginBottom: 10 }} />
+                        <Text style={{ color: '#fff', fontSize: 10, textAlign: 'center', fontWeight: 'bold' }} numberOfLines={3}>{movie.title}</Text>
+                    </View>
+                )}
                 {isFocused && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(193,145,95,0.2)' }} pointerEvents="none" />}
             </Pressable>
-            {/* 🔥 EL NOMBRE LIMPIO DE LA PELÍCULA 🔥 */}
-            <Text style={{ color: '#ccc', fontSize: 11, marginTop: 8, textAlign: 'center', fontWeight: '600' }} numberOfLines={2}>{movie.title}</Text>
+            <Text style={{ color: '#ccc', fontSize: 12, marginTop: 8, textAlign: 'center', fontWeight: '600' }} numberOfLines={2}>{movie.title}</Text>
         </View>
     );
 };
@@ -1125,11 +1172,19 @@ const LicensesModal = ({ visible, onClose }) => (
     </Modal>
 );
 // ==========================================
-// 3. REPRODUCTOR DE VIDEO (MOTOR REACT-NATIVE-VIDEO PREMIUM)
+// 3. REPRODUCTOR DE VIDEO (MOTOR HÍBRIDO PREMIUM)
 // ==========================================
 function VideoPlayerScreen({ route, navigation }) {
-    const { updateContinueWatching } = useContext(AppContext);
+    const { updateContinueWatching, setShowCastModal } = useContext(AppContext); // 🔥 Agregamos Cast
     const { movie, startAt = 0, selectedQuality } = route.params;
+    // 🔥 FIX: CREAR LA URL DE TRANSMISIÓN 🔥
+    const finalJellyfinId = movie?.jellyfin_id || (String(movie?.id).startsWith('jf_') ? String(movie.id).replace('jf_', '') : movie?.id);
+    let streamUrl = `${JELLYFIN_URL}/Items/${finalJellyfinId}/Download?api_key=${JELLYFIN_API_KEY}`;
+
+    // Si tienes el mapa de fuentes (el "cerebro" de calidades), usamos la calidad seleccionada
+    if (movie?.sourcesMap && movie.sourcesMap[selectedQuality]) {
+        streamUrl = `${JELLYFIN_URL}/Videos/${finalJellyfinId}/stream.mp4?Static=true&MediaSourceId=${movie.sourcesMap[selectedQuality]}&api_key=${JELLYFIN_API_KEY}`;
+    }
     const { width, height } = useWindowDimensions();
     const isMobile = width < 768;
 
@@ -1138,39 +1193,35 @@ function VideoPlayerScreen({ route, navigation }) {
     const hideGestureTimer = useRef(null);
     const lastUIUpdateTime = useRef(0);
 
-    // ESTADOS BÁSICOS
     const [showControls, setShowControls] = useState(true);
     const [status, setStatus] = useState({ isPlaying: true, isBuffering: true, duration: 0, currentTime: 0 });
     const [isLocked, setIsLocked] = useState(false);
 
-    // 🔥 ANIMACIONES SUAVES (PUNTO A)
+    // 🔥 NUEVO: Estados para UX de TV y Arrastre 🔥
+    const [scrubbingTime, setScrubbingTime] = useState(null);
+    const statusRef = useRef(status);
+    useEffect(() => { statusRef.current = status; }, [status]); // Memoria para las flechas de TV
+
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const fadeVolumeAnim = useRef(new Animated.Value(0)).current;
     const fadeBrightnessAnim = useRef(new Animated.Value(0)).current;
 
-    // TAMAÑOS DE PANTALLA
     const resizeModes = ['contain', 'cover', 'stretch', 'none'];
     const [resizeModeIndex, setResizeModeIndex] = useState(0);
-
-    // PANTALLA FLOTANTE (PiP)
     const [isPip, setIsPip] = useState(false);
     const [showNextEpisodeBtn, setShowNextEpisodeBtn] = useState(false);
 
-    // PISTAS Y SUBTÍTULOS
     const defaultAudio = movie.audioTracks?.find(a => a.isDefault)?.index ?? 0;
     const defaultSub = -1;
-
     const [availableAudioTracks, setAvailableAudioTracks] = useState([]);
     const [availableTextTracks, setAvailableTextTracks] = useState([]);
     const [selectedAudio, setSelectedAudio] = useState({ type: 'index', value: defaultAudio });
     const [selectedSub, setSelectedSub] = useState({ type: 'disabled' });
-
     const [menuAudioTrack, setMenuAudioTrack] = useState(defaultAudio);
     const [menuSubTrack, setMenuSubTrack] = useState(defaultSub);
     const [showTracksModal, setShowTracksModal] = useState(false);
     const [activeModalTab, setActiveModalTab] = useState('audio');
 
-    // NUEVO SISTEMA DE GESTOS
     const [volumeLevel, setVolumeLevel] = useState(1);
     const [brightnessLevel, setBrightnessLevel] = useState(1);
     const [showVolumeUI, setShowVolumeUI] = useState(false);
@@ -1180,14 +1231,18 @@ function VideoPlayerScreen({ route, navigation }) {
     const lastTapRef = useRef({ time: 0, side: null });
     const { PanResponder } = require('react-native');
 
-    const finalJellyfinId = movie.jellyfin_id || (String(movie.id).startsWith('jf_') ? String(movie.id).replace('jf_', '') : movie.id);
-
-    let sourceParam = '';
-    if (selectedQuality && movie.sourcesMap && movie.sourcesMap[selectedQuality]) {
-        sourceParam = `&MediaSourceId=${movie.sourcesMap[selectedQuality]}`;
-    }
-
-    const streamUrl = `${JELLYFIN_URL}/Videos/${finalJellyfinId}/stream?api_key=${JELLYFIN_API_KEY}&Static=true${sourceParam}`;
+    // 🔥 NUEVO: ESCUCHADOR DE TECLADO / CONTROL DE TV 🔥
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            const handleKeyDown = (e) => {
+                if (e.key === 'ArrowRight') { skip(10); setShowControls(true); }
+                else if (e.key === 'ArrowLeft') { skip(-10); setShowControls(true); }
+                else if (e.key === ' ' || e.key === 'Enter') { togglePlayPause(); }
+            };
+            window.addEventListener('keydown', handleKeyDown);
+            return () => window.removeEventListener('keydown', handleKeyDown);
+        }
+    }, []);
 
     const resetControlsTimer = () => {
         if (isLocked) return;
@@ -1220,45 +1275,19 @@ function VideoPlayerScreen({ route, navigation }) {
         }
     };
 
-    // 🔥 GESTOS CON DESVANECIMIENTO SUAVE 🔥
-    const panResponder = useRef(
-        PanResponder.create({
-            onStartShouldSetPanResponder: () => false,
-            onMoveShouldSetPanResponder: (evt, gestureState) => Math.abs(gestureState.dy) > 15,
-            onPanResponderGrant: () => {
-                initialVolume.current = volumeLevel;
-                initialBrightness.current = brightnessLevel;
-            },
-            onPanResponderMove: async (evt, gestureState) => {
-                if (!isMobile || isLocked) return;
-                const { pageX } = evt.nativeEvent;
-                const change = gestureState.dy / 200;
-
-                if (timeoutRef.current) clearTimeout(timeoutRef.current);
-
-                if (pageX > width / 2) {
-                    const newVol = Math.max(0, Math.min(1, initialVolume.current - change));
-                    setVolumeLevel(newVol);
-                    if (!showVolumeUI) {
-                        setShowVolumeUI(true);
-                        Animated.timing(fadeVolumeAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
-                    }
-                } else {
-                    const newBright = Math.max(0, Math.min(1, initialBrightness.current - change));
-                    setBrightnessLevel(newBright);
-                    if (!showBrightnessUI) {
-                        setShowBrightnessUI(true);
-                        Animated.timing(fadeBrightnessAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
-                    }
-                    if (Platform.OS !== 'web') await Brightness.setBrightnessAsync(newBright);
-                }
-                startHideGestureUITimer();
-            }
-        })
-    ).current;
-
-    const togglePlayPause = () => { resetControlsTimer(); setStatus(p => ({ ...p, isPlaying: !p.isPlaying })); };
-    const skip = (secs) => { if (videoRef.current) videoRef.current.seek(status.currentTime + secs); resetControlsTimer(); };
+    // 🔥 FIX: Adelantar sin retrasos 🔥
+    // 🔥 FIX: Adelantar con respuesta visual inmediata 🔥
+    const skip = (secs) => {
+        if (videoRef.current) {
+            const newTime = Math.max(0, Math.min(statusRef.current.duration, statusRef.current.currentTime + secs));
+            // Activamos el buffering visualmente para que no se sienta congelado
+            setStatus(p => ({ ...p, currentTime: newTime, isBuffering: true }));
+            videoRef.current.seek(newTime);
+        }
+        resetControlsTimer();
+    };
+    // 🔥 FIX: Función para pausar/reproducir el video 🔥
+    const togglePlayPause = () => { setStatus(p => ({ ...p, isPlaying: !p.isPlaying })); resetControlsTimer(); };
     const toggleCrop = () => { resetControlsTimer(); setResizeModeIndex((prev) => (prev + 1) % resizeModes.length); };
 
     const handlePiP = () => {
@@ -1312,6 +1341,7 @@ function VideoPlayerScreen({ route, navigation }) {
         else if (startAt > 0) videoRef.current.seek(startAt);
     };
 
+    // 🔥 CEREBRO DE PROGRESO Y AUTOPLAY 🔥
     const onProgress = (data) => {
         const now = Date.now();
         if (now - lastUIUpdateTime.current > 1000) {
@@ -1319,9 +1349,46 @@ function VideoPlayerScreen({ route, navigation }) {
             lastUIUpdateTime.current = now;
             const progressVal = data.currentTime / status.duration;
 
-            if (progressVal > 0.02 && progressVal < 0.95) updateContinueWatching(movie, progressVal);
-            if (progressVal > 0.90 && (movie.type === 'series' || movie.isAnime || movie.isNovel)) setShowNextEpisodeBtn(true);
-            else setShowNextEpisodeBtn(false);
+            // 1. Guarda el progreso en "Sigue viendo"
+            if (progressVal > 0.02 && progressVal < 0.95) {
+                updateContinueWatching(movie, progressVal);
+            }
+
+            // 2. Muestra el botón de "Siguiente Episodio" al 90% (Solo para series)
+            if (progressVal > 0.90 && (movie.type === 'series' || movie.isAnime || movie.isNovel || movie.type === 'episode')) {
+                setShowNextEpisodeBtn(true);
+            } else {
+                setShowNextEpisodeBtn(false);
+            }
+
+            // 3. EVENTO DE FIN DE VIDEO (Llegamos al 98% o más)
+            if (progressVal > 0.98) {
+                handleVideoEnd();
+            }
+        }
+    };
+
+    // 🔥 EVENTO: ¿QUÉ PASA CUANDO TERMINA EL VIDEO? 🔥
+    const handleVideoEnd = () => {
+        // 1. Lo borramos del "Sigue Viendo" (ya lo terminó)
+        const finalJellyfinId = movie?.jellyfin_id || (String(movie?.id).startsWith('jf_') ? String(movie.id).replace('jf_', '') : movie?.id);
+        removeFromContinueWatching(finalJellyfinId);
+
+        // 2. ¿Es una Película? Se acabó la función. Salimos al catálogo.
+        if (movie.type === 'movie' && !movie.isAnime && !movie.isNovel) {
+            if (Platform.OS === 'android') ToastAndroid.show("Película terminada. ¡Esperamos que la hayas disfrutado!", ToastAndroid.SHORT);
+            navigation.goBack();
+            return;
+        }
+
+        // 3. ¿Es un Episodio? ¡Magia de Autoplay!
+        if (movie.type === 'episode') {
+            console.log("Buscando siguiente capítulo...");
+            // Aquí iría la lógica para buscar el siguiente ID en tu lista de 'seasonsData'
+            // Por ahora, como es un MVP web, simplemente regresamos a la pantalla de la serie para que lo elija,
+            // pero en la versión final de TV/Móvil, inyectaremos el nuevo URL de Jellyfin directamente.
+            if (Platform.OS === 'android') ToastAndroid.show("Saltando al siguiente episodio...", ToastAndroid.SHORT);
+            navigation.goBack();
         }
     };
 
@@ -1363,7 +1430,8 @@ function VideoPlayerScreen({ route, navigation }) {
     }, []);
 
     return (
-        <View style={styles.playerContainer}>
+        // 🔥 FIX SCROLLBAR: Forzamos 100vh en web para que la pantalla no se baje ni haya scroll
+        <View style={[styles.playerContainer, Platform.OS === 'web' && { height: '100vh', overflow: 'hidden' }]}>
             <StatusBar hidden />
 
             <Modal visible={showTracksModal} transparent={true} animationType="fade">
@@ -1414,7 +1482,7 @@ function VideoPlayerScreen({ route, navigation }) {
                 </View>
             </Modal>
 
-            <View style={styles.videoWrapper} {...panResponder.panHandlers}>
+            <View style={styles.videoWrapper}>
                 <Video
                     ref={videoRef}
                     source={{ uri: streamUrl }}
@@ -1457,7 +1525,6 @@ function VideoPlayerScreen({ route, navigation }) {
                 </View>
             </View>
 
-            {/* 🔥 INDICADORES ANIMADOS 🔥 */}
             {isMobile && showVolumeUI && !isLocked && (
                 <Animated.View style={[styles.gestureUIIndicatorRight, { zIndex: 100, elevation: 100, opacity: fadeVolumeAnim }]}>
                     <Ionicons name={volumeLevel === 0 ? "volume-mute" : "volume-high"} size={30} color="#fff" />
@@ -1478,6 +1545,10 @@ function VideoPlayerScreen({ route, navigation }) {
                             <Text style={styles.playerTopTitle} numberOfLines={1}>{movie.title}</Text>
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            {/* 🔥 BOTÓN DE TRANSMITIR AGREGADO 🔥 */}
+                            <TouchableOpacity activeOpacity={0.6} onPress={() => setShowCastModal(true)} style={[styles.playerCloseBtn, { marginRight: 15 }]}>
+                                <Ionicons name="tv-outline" size={24} color="#fff" />
+                            </TouchableOpacity>
                             {Platform.OS === 'ios' || Platform.OS === 'android' ? (
                                 <TouchableOpacity activeOpacity={0.6} onPress={handlePiP} style={[styles.playerCloseBtn, { marginRight: 15 }]}>
                                     <Ionicons name="browsers-outline" size={24} color="#fff" />
@@ -1491,26 +1562,31 @@ function VideoPlayerScreen({ route, navigation }) {
 
                     <LinearGradient colors={['transparent', 'rgba(0,0,0,0.95)']} style={styles.playerBottomBar}>
                         <View style={styles.timeAndBarRow}>
-                            <Text style={styles.playerTimeText}>{formatTime(status.currentTime)}</Text>
+                            {/* 🔥 UX DE SLIDER: Muestra el tiempo al que arrastras en vivo 🔥 */}
+                            <Text style={styles.playerTimeText}>{formatTime(scrubbingTime !== null ? scrubbingTime : status.currentTime)}</Text>
 
-                            {/* 🔥 SLIDER MÁS FÁCIL DE TOCAR (PUNTO B) 🔥 */}
                             <View style={[styles.customSliderContainer, { height: 50, justifyContent: 'center' }]}>
                                 <Slider
                                     style={{ flex: 1, height: 40 }}
                                     minimumValue={0}
                                     maximumValue={status.duration > 0 ? status.duration : 1}
-                                    value={status.currentTime}
+                                    value={scrubbingTime !== null ? scrubbingTime : status.currentTime}
                                     minimumTrackTintColor={PREMIUM_GOLD}
                                     maximumTrackTintColor="#333333"
                                     thumbTintColor="#ffffff"
                                     onSlidingStart={() => { if (timeoutRef.current) clearTimeout(timeoutRef.current); }}
-                                    onSlidingComplete={(val) => { if (videoRef.current) videoRef.current.seek(val); resetControlsTimer(); }}
+                                    onValueChange={(val) => { setScrubbingTime(val); }} // Actualiza el texto en vivo
+                                    onSlidingComplete={(val) => {
+                                        setScrubbingTime(null);
+                                        if (videoRef.current) videoRef.current.seek(val);
+                                        resetControlsTimer();
+                                    }}
                                 />
                             </View>
-                            <Text style={styles.playerTimeText}>-{formatTime(Math.max(0, status.duration - status.currentTime))}</Text>
+                            {/* 🔥 UX: Tiempo Total en lugar de restante 🔥 */}
+                            <Text style={styles.playerTimeText}>{formatTime(status.duration)}</Text>
                         </View>
 
-                        {/* 🔥 BOTONES CON EFECTO TOUCH (PUNTO C) 🔥 */}
                         <View style={styles.bottomIconsRow}>
                             <TouchableOpacity activeOpacity={0.6} onPress={togglePlayPause}><Ionicons name={status.isPlaying ? "pause" : "play"} size={32} color="#fff" /></TouchableOpacity>
                             <TouchableOpacity activeOpacity={0.6} onPress={openAudioTracks}><Ionicons name="musical-note" size={26} color="#fff" /></TouchableOpacity>
@@ -1528,7 +1604,7 @@ function VideoPlayerScreen({ route, navigation }) {
 // ==========================================
 function HomeScreen({ route, navigation }) {
     const {
-        user, setShowVipModal, // 🔥 FIX: Importamos el usuario y el interruptor del muro VIP
+        user, setShowVipModal, // 🔥 Importamos el usuario y el interruptor del muro VIP
         watchlist, toggleWatchlist, continueWatching,
         removeFromContinueWatching, jellyfinMovies,
         isOfflineMode, completedDownloads,
@@ -1546,13 +1622,15 @@ function HomeScreen({ route, navigation }) {
     // 🔥 NUEVOS ESTADOS PARA REANUDAR Y CALIDAD 🔥
     const [showResumeModal, setShowResumeModal] = useState(false);
     const [itemToResume, setItemToResume] = useState(null);
-    const [itemToProcessLocal, setItemToProcessLocal] = useState(null); // 🔥 Estado local para evitar crasheos
+    const [itemToProcessLocal, setItemToProcessLocal] = useState(null);
 
     const scrollY = useRef(new Animated.Value(0)).current;
     const HERO_HEIGHT = isMobile ? height * 0.88 : height * 0.90;
+
+    // 🔥 ESTADO DE TV: Guarda qué película está enfocada actualmente con el control remoto
     const [tvFocusedMovie, setTvFocusedMovie] = useState(null);
 
-    // 🔥 Atrapa el botón "Atrás" físico para salir de los Estudios 🔥
+    // Atrapa el botón "Atrás" físico para salir de los Estudios
     useFocusEffect(
         useCallback(() => {
             const onBackPress = () => {
@@ -1572,14 +1650,17 @@ function HomeScreen({ route, navigation }) {
             setSelectedStudio(null);
             scrollViewRef.current?.scrollTo({ y: 0, animated: true });
         }
-        if (!isOfflineMode) {
+        if (!isOfflineMode && isMobile) {
+            // Solo rotamos automáticamente el hero en versión móvil
             const timer = setInterval(() => { setHeroIndex((prev) => (prev + 1) % 5); }, 7000);
             return () => clearInterval(timer);
         }
-    }, [route.params?.reset, isOfflineMode]);
+    }, [route.params?.reset, isOfflineMode, isMobile]);
 
     const displayData = jellyfinMovies && jellyfinMovies.length > 0 ? jellyfinMovies : FALLBACK_HERO;
     const topHeroMovies = displayData.slice(0, 5);
+
+    // 🔥 CEREBRO VISUAL: En TV muestra lo que enfocas, en móvil el carrusel normal
     const activeHero = (!isMobile && tvFocusedMovie) ? tvFocusedMovie : (topHeroMovies[heroIndex] || topHeroMovies[0]);
 
     const moviesOnly = displayData.filter(m => m.type === 'movie');
@@ -1614,14 +1695,14 @@ function HomeScreen({ route, navigation }) {
             setItemToResume(cwItem);
             setShowResumeModal(true);
         } else if (currentMovie.qualities && currentMovie.qualities.length > 1) {
-            setItemToProcessLocal(currentMovie); // 🔥 FIX: Guardamos la peli localmente sin crashear
+            setItemToProcessLocal(currentMovie); // Guardamos la peli localmente sin crashear
             setShowQuality(true);
         } else {
             navigation.navigate('VideoPlayer', { movie: currentMovie });
         }
     };
 
-    // 🔥 FIX: Ahora el reproductor sabe exactamente qué película arrancar (evita que siempre abra el Hero)
+    // Ahora el reproductor sabe exactamente qué película arrancar (evita que siempre abra el Hero)
     const startPlayback = (quality) => {
         setShowQuality(false);
         navigation.navigate('VideoPlayer', { movie: itemToProcessLocal || activeHero, selectedQuality: quality });
@@ -1632,7 +1713,7 @@ function HomeScreen({ route, navigation }) {
             <QualitySelectorModal visible={showQuality} onClose={() => setShowQuality(false)} onSelect={startPlayback} actionType="play" movie={itemToProcessLocal || activeHero} />
             <BatteryOptimizationModal visible={showBatteryModal} onClose={() => setShowBatteryModal(false)} />
 
-            {/* 🔥 EL NUEVO MODAL DE REANUDACIÓN CON CAMBIO DE CALIDAD 🔥 */}
+            {/* MODAL DE REANUDACIÓN CON CAMBIO DE CALIDAD */}
             <ResumeModal
                 visible={showResumeModal}
                 onClose={() => setShowResumeModal(false)}
@@ -1647,43 +1728,93 @@ function HomeScreen({ route, navigation }) {
                 }}
                 onChangeQuality={() => {
                     setShowResumeModal(false);
-                    setItemToProcessLocal(itemToResume); // Le pasamos la peli al selector de calidad
-                    setShowQuality(true); // Abrimos el selector de calidad
+                    setItemToProcessLocal(itemToResume);
+                    setShowQuality(true);
                 }}
             />
 
             {isMobile && <MobileHeader scrollY={scrollY} heroHeight={HERO_HEIGHT} />}
 
-            <Animated.ScrollView
-                ref={scrollViewRef}
-                style={styles.mainScreen}
-                contentContainerStyle={{ paddingBottom: isMobile ? 100 : 60, paddingTop: 0 }}
-                onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-                scrollEventThrottle={16}
-                showsVerticalScrollIndicator={false}
+            {/* 📺 ========================================================
+                CAPA 1: EL FONDO FIJO Y DINÁMICO (SOLO TV - EFECTO NUVIO)
+               ======================================================== */}
+            {!isMobile && !selectedStudio && activeHero && (
+                <View style={[StyleSheet.absoluteFillObject, { zIndex: 0 }]}>
+                    <ExpoImage
+                        key={`bg-${activeHero.id}`}
+                        source={{ uri: activeHero.bgImage || activeHero.tmdbBg || activeHero.thumb }}
+                        style={StyleSheet.absoluteFillObject}
+                        contentFit="cover"
+                        transition={300} // Transición suave entre enfoques
+                    />
+                    {/* Degradados oscuros para asegurar legibilidad */}
+                    <LinearGradient colors={['#000000', 'transparent', 'rgba(0,0,0,0.9)', '#000000']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
+                    <LinearGradient colors={['#000000', 'rgba(0,0,0,0.8)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0 }} style={StyleSheet.absoluteFillObject} />
+
+                    <View style={{ position: 'absolute', top: '22%', left: 80, width: '50%' }}>
+                        <Text style={[styles.heroTitle, { fontSize: 50, color: '#fff', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 10, textTransform: 'uppercase', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed' }]} numberOfLines={2}>
+                            {activeHero.title}
+                        </Text>
+
+                        <View style={[styles.heroTags, { marginBottom: 15 }]}>
+                            <Text style={[styles.tagText, { fontSize: 16, fontWeight: 'bold', color: '#fff' }]}>{activeHero.year}</Text><Text style={styles.tagDot}> • </Text>
+                            <View style={[styles.tagBox, { borderColor: '#fff', borderWidth: 1, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: 'rgba(0,0,0,0.5)' }]}><Text style={[styles.tagText, { color: '#fff', fontSize: 14 }]}>{activeHero.rating || 'VIP'}</Text></View><Text style={styles.tagDot}> • </Text>
+                            <Text style={[styles.tagText, { fontSize: 16, fontWeight: 'bold', color: '#fff' }]}>{activeHero.lang || 'Latino'}</Text>
+                        </View>
+
+                        <Text style={{ fontSize: 16, lineHeight: 24, color: '#e0e0e0', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 6, marginBottom: 20 }} numberOfLines={4}>
+                            {activeHero.overview}
+                        </Text>
+
+                        <View style={{ flexDirection: 'row', gap: 15 }}>
+                            <TouchableOpacity style={[styles.btnPlayBigTV, { paddingHorizontal: 35, paddingVertical: 15, borderRadius: 8, backgroundColor: '#fff', margin: 0 }]} onPress={() => handlePlayPress(activeHero)}>
+                                <Ionicons name="play" size={22} color="#000" />
+                                <Text style={[styles.btnPlayBigText, { fontSize: 17, fontWeight: 'bold', color: '#000', marginLeft: 10 }]}>Reproducir</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.btnIconAction, { width: 55, height: 55, justifyContent: 'center', alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', margin: 0 }]} onPress={() => toggleWatchlist(activeHero)}>
+                                <Ionicons name={watchlist.some(m => m.id === activeHero.id) ? "checkmark" : "add"} size={30} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            )}
+
+            {/* 📺 ========================================================
+                CAPA 2: LA CAJA RESTRINGIDA DE LISTAS (CORTE INVISIBLE)
+               ======================================================== */}
+            <View
+                style={isMobile
+                    ? { flex: 1, zIndex: 10 }
+                    : { position: 'absolute', bottom: 0, left: 0, right: 0, height: height * 0.38, zIndex: 10, overflow: 'hidden' } // 🔥 REDUCIDO A 38%
+                }
             >
-                {!selectedStudio && activeHero && (
-                    <View style={{ width: width, height: HERO_HEIGHT, backgroundColor: '#000', overflow: 'hidden' }}>
-                        <View style={StyleSheet.absoluteFillObject}>
-                            <Image
-                                key={`bg-${activeHero.id}`}
-                                source={{ uri: activeHero.bgImage || activeHero.thumb }}
-                                style={StyleSheet.absoluteFillObject}
-                                blurRadius={isMobile ? 0 : (tvFocusedMovie ? 0 : 30)}
-                                resizeMode="cover"
-                            />
-
-                            <LinearGradient
-                                colors={isMobile ? ['transparent', 'rgba(0,0,0,0.8)', '#000000'] : ['transparent', 'rgba(0,0,0,0.5)', '#000000']}
-                                start={{ x: 0, y: 0.2 }}
-                                end={{ x: 0, y: 1 }}
-                                style={StyleSheet.absoluteFillObject}
-                            />
-
-                            <View style={[StyleSheet.absoluteFill, isMobile ? { justifyContent: 'flex-end', paddingBottom: 25, paddingHorizontal: 20, alignItems: 'center' } : { flexDirection: 'row', alignItems: 'flex-end', zIndex: 10, paddingBottom: 40 }]}>
-
-                                <View style={isMobile ? { alignItems: 'center', width: '100%' } : { paddingLeft: 80, paddingRight: 20, maxWidth: 650 }}>
-                                    <Text style={[styles.heroTitle, isMobile ? { fontSize: 34, textAlign: 'center', color: '#ebd197' } : { fontSize: 46, color: '#fff', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 6 }, { textTransform: 'uppercase', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 1, marginBottom: 15 }]}>{activeHero.title}</Text>
+                <Animated.ScrollView
+                    ref={scrollViewRef}
+                    style={{ flex: 1 }}
+                    // 🔥 PADDING TOP DE 40 PARA EMPUJAR LAS CARTAS HACIA ABAJO
+                    contentContainerStyle={{ paddingBottom: isMobile ? 100 : 60, paddingTop: isMobile ? 0 : 40 }}
+                    onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+                    scrollEventThrottle={16}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* Hero Móvil Clásico (Se renderiza SOLO si es móvil) */}
+                    {isMobile && !selectedStudio && activeHero && (
+                        <View style={{ width: width, height: HERO_HEIGHT, backgroundColor: '#000', overflow: 'hidden' }}>
+                            <View style={StyleSheet.absoluteFillObject}>
+                                <Image
+                                    key={`bg-${activeHero.id}`}
+                                    source={{ uri: activeHero.bgImage || activeHero.thumb }}
+                                    style={StyleSheet.absoluteFillObject}
+                                    resizeMode="cover"
+                                />
+                                <LinearGradient
+                                    colors={['transparent', 'rgba(0,0,0,0.8)', '#000000']}
+                                    start={{ x: 0, y: 0.2 }}
+                                    end={{ x: 0, y: 1 }}
+                                    style={StyleSheet.absoluteFillObject}
+                                />
+                                <View style={[StyleSheet.absoluteFill, { justifyContent: 'flex-end', paddingBottom: 25, paddingHorizontal: 20, alignItems: 'center' }]}>
+                                    <Text style={[styles.heroTitle, { fontSize: 34, textAlign: 'center', color: '#ebd197', textTransform: 'uppercase', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 1, marginBottom: 15 }]}>{activeHero.title}</Text>
 
                                     <View style={[styles.heroTags, { marginBottom: 15 }]}>
                                         <Text style={[styles.tagText, { fontSize: 13, fontWeight: 'bold', color: '#fff', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 4 }]}>{activeHero.year}</Text><Text style={styles.tagDot}> • </Text>
@@ -1691,113 +1822,94 @@ function HomeScreen({ route, navigation }) {
                                         <Text style={[styles.tagText, { fontSize: 13, fontWeight: 'bold', color: '#fff', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 4 }]}>{activeHero.lang || 'Latino'}</Text>
                                     </View>
 
-                                    <Text style={isMobile ? [styles.heroGenres, { textAlign: 'center', marginBottom: 20, color: '#e0e0e0', fontWeight: 'bold', fontSize: 12 }] : [styles.heroOverview, { fontSize: 16, lineHeight: 24, marginBottom: 25, color: '#ddd', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 5 }]} numberOfLines={isMobile ? 1 : 3}>
-                                        {isMobile ? activeHero.genres : activeHero.overview}
+                                    <Text style={[styles.heroGenres, { textAlign: 'center', marginBottom: 20, color: '#e0e0e0', fontWeight: 'bold', fontSize: 12 }]} numberOfLines={1}>
+                                        {activeHero.genres}
                                     </Text>
 
-                                    {(!tvFocusedMovie || isMobile) && (
-                                        <View style={{ flexDirection: 'row', justifyContent: isMobile ? 'center' : 'flex-start', width: '100%', gap: 15, alignItems: 'center' }}>
-                                            <TouchableOpacity style={isMobile ? [styles.btnPlayHeroMobile, { flex: undefined, width: 220, height: 50, borderRadius: 8, marginRight: 0 }] : [styles.btnPlayBigTV, { paddingHorizontal: 35, paddingVertical: 15, borderRadius: 8, backgroundColor: '#fff', marginRight: 0 }]} onPress={() => handlePlayPress(activeHero)}>
-                                                <Ionicons name="play" size={isMobile ? 24 : 22} color="#000" />
-                                                <Text style={isMobile ? [styles.btnPlayTextMobile, { fontSize: 18 }] : [styles.btnPlayBigText, { fontSize: 17, fontWeight: 'bold', color: '#000', marginLeft: 10 }]}>Mira ahora</Text>
-                                            </TouchableOpacity>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'center', width: '100%', gap: 15, alignItems: 'center' }}>
+                                        <TouchableOpacity style={[styles.btnPlayHeroMobile, { flex: undefined, width: 220, height: 50, borderRadius: 8, marginRight: 0 }]} onPress={() => handlePlayPress(activeHero)}>
+                                            <Ionicons name="play" size={24} color="#000" />
+                                            <Text style={[styles.btnPlayTextMobile, { fontSize: 18 }]}>Mira ahora</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={[styles.btnAddHeroMobile, { backgroundColor: 'rgba(255,255,255,0.15)', height: 50, width: 50, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' }]} onPress={() => toggleWatchlist(activeHero)}>
+                                            <Ionicons name={watchlist.some(m => m.id === activeHero.id) ? "checkmark" : "add"} size={28} color="#fff" />
+                                        </TouchableOpacity>
+                                    </View>
 
-                                            <TouchableOpacity style={isMobile ? [styles.btnAddHeroMobile, { backgroundColor: 'rgba(255,255,255,0.15)', height: 50, width: 50, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' }] : [styles.btnIconAction, { width: 50, height: 50, justifyContent: 'center', alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', marginRight: 0 }]} onPress={() => toggleWatchlist(activeHero)}>
-                                                <Ionicons name={watchlist.some(m => m.id === activeHero.id) ? "checkmark" : "add"} size={isMobile ? 28 : 30} color="#fff" />
-                                            </TouchableOpacity>
-                                        </View>
-                                    )}
-
-                                    {isMobile && (
-                                        <View style={[styles.paginationDots, { marginTop: 15 }]}>
-                                            {topHeroMovies.map((_, i) => (
-                                                <View key={i} style={[styles.dot, { backgroundColor: heroIndex === i ? '#fff' : 'rgba(255,255,255,0.3)', width: heroIndex === i ? 6 : 5, height: heroIndex === i ? 6 : 5 }]} />
-                                            ))}
-                                        </View>
-                                    )}
-                                </View>
-
-                                {!isMobile && !tvFocusedMovie && (
-                                    <View style={{ flex: 1, flexDirection: 'row', height: '100%', paddingRight: 40, alignItems: 'center', justifyContent: 'flex-end' }}>
-                                        {topHeroMovies.map((movie, index) => (
-                                            <ExpandingPoster
-                                                key={`exp-${movie.id}`}
-                                                movie={movie}
-                                                isActive={heroIndex === index}
-                                                onPress={() => setHeroIndex(index)}
-                                                isMobile={isMobile}
-                                            />
+                                    <View style={[styles.paginationDots, { marginTop: 15 }]}>
+                                        {topHeroMovies.map((_, i) => (
+                                            <View key={i} style={[styles.dot, { backgroundColor: heroIndex === i ? '#fff' : 'rgba(255,255,255,0.3)', width: heroIndex === i ? 6 : 5, height: heroIndex === i ? 6 : 5 }]} />
                                         ))}
                                     </View>
-                                )}
+                                </View>
                             </View>
                         </View>
-                    </View>
-                )}
-
-                <View style={{ marginTop: 25, zIndex: 10 }}>
-
-                    {!selectedStudio && continueWatching.length > 0 && (
-                        <ContinueWatchingList
-                            title="Sigue viendo"
-                            data={continueWatching}
-                            onMoviePress={(movie) => {
-                                // 🔥 AHORA ABRE EL MODAL DIRECTAMENTE AL TOCAR LA PORTADA 🔥
-                                setItemToResume(movie);
-                                setShowResumeModal(true);
-                            }}
-                            isMobile={isMobile}
-                            onRemoveItem={removeFromContinueWatching}
-                            onViewAll={() => navigation.navigate('History')}
-                        />
                     )}
 
-                    {!selectedStudio && <MovieList title="Agregados Recientemente" data={displayData} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
-                    {!selectedStudio && recomendados.length > 0 && <MovieList title="Recomendados para ti" data={recomendados} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
-                    {!selectedStudio && moviesOnly.length > 0 && <MovieList title="Películas Destacadas" data={moviesOnly} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
-                    {!selectedStudio && seriesOnly.length > 0 && <MovieList title="Series VIP" data={seriesOnly} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
-                    {!selectedStudio && novelsOnly.length > 0 && <MovieList title="Telenovelas" data={novelsOnly} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
-                    {!selectedStudio && animesOnly.length > 0 && <MovieList title="Animes" data={animesOnly} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
-
-                    {!selectedStudio && <GenreList title="Explorar Géneros" data={POPULAR_GENRES} isMobile={isMobile} onGenrePress={(genreName) => navigation.navigate('Buscar', { initialQuery: genreName })} />}
-
-                    <View style={[styles.carouselContainer, { marginTop: 10, marginBottom: 20 }]}>
-                        <Text style={[styles.sectionTitle, isMobile && { marginLeft: 15 }, { marginBottom: 15 }]}>Servicios de Streaming</Text>
-                        <FlatList horizontal data={ESTUDIOS} keyExtractor={(item) => item.name} showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.flatListContent, isMobile && { paddingLeft: 15, paddingRight: 15 }]}
-                            renderItem={({ item }) => {
-                                const isActive = selectedStudio === item.query;
-                                return (
-                                    <TouchableOpacity
-                                        style={[
-                                            isMobile ? { width: 140, height: 80 } : { width: 220, height: 120 },
-                                            { borderRadius: 12, marginRight: 15, backgroundColor: item.color, justifyContent: 'center', alignItems: 'center', borderWidth: isActive ? 2 : 1, borderColor: isActive ? PREMIUM_GOLD : 'rgba(255,255,255,0.1)' }
-                                        ]}
-                                        onPress={() => setSelectedStudio(isActive ? null : item.query)}
-                                    >
-                                        <Image source={{ uri: item.logo }} style={{ width: '60%', height: '60%', opacity: isActive ? 1 : 0.7 }} resizeMode="contain" />
-                                    </TouchableOpacity>
-                                )
-                            }}
-                        />
-                    </View>
-
-                    {selectedStudio && (
-                        <View style={[styles.catalogWrapper, isMobile && { paddingLeft: 15, paddingRight: 15 }]}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                                <Text style={[styles.catalogHeaderTitle, { marginBottom: 0 }, isMobile && { fontSize: 20, color: PREMIUM_GOLD }]}>Catálogo de {selectedStudio}</Text>
-                                <TouchableOpacity onPress={() => setSelectedStudio(null)} style={{ padding: 8, backgroundColor: '#222', borderRadius: 20 }}>
-                                    <Ionicons name="close" size={20} color="#fff" />
-                                </TouchableOpacity>
-                            </View>
-                            <FilteredGridView
-                                movies={displayData.filter(m => m.studio && m.studio.toLowerCase().includes(selectedStudio.toLowerCase()))}
-                                onMoviePress={openMovieDetails}
+                    {/* 📚 FILAS DE CONTENIDO (MÓVIL Y TV) */}
+                    {/* 🔥 FIX: Padding adicional en TV para no tapar el título 🔥 */}
+                    <View style={{ marginTop: isMobile ? 25 : 60, zIndex: 10 }}>
+                        {!selectedStudio && continueWatching.length > 0 && (
+                            <ContinueWatchingList
+                                title="Sigue viendo"
+                                data={continueWatching}
+                                onMoviePress={(movie) => {
+                                    setItemToResume(movie);
+                                    setShowResumeModal(true);
+                                }}
                                 isMobile={isMobile}
+                                onRemoveItem={removeFromContinueWatching}
+                                onViewAll={() => navigation.navigate('History')}
+                            />
+                        )}
+
+                        {!selectedStudio && <MovieList title="Agregados Recientemente" data={displayData} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
+                        {!selectedStudio && recomendados.length > 0 && <MovieList title="Recomendados para ti" data={recomendados} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
+                        {!selectedStudio && moviesOnly.length > 0 && <MovieList title="Películas Destacadas" data={moviesOnly} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
+                        {!selectedStudio && seriesOnly.length > 0 && <MovieList title="Series VIP" data={seriesOnly} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
+                        {!selectedStudio && novelsOnly.length > 0 && <MovieList title="Telenovelas" data={novelsOnly} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
+                        {!selectedStudio && animesOnly.length > 0 && <MovieList title="Animes" data={animesOnly} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
+
+                        {!selectedStudio && <GenreList title="Explorar Géneros" data={POPULAR_GENRES} isMobile={isMobile} onGenrePress={(genreName) => navigation.navigate('Buscar', { initialQuery: genreName })} />}
+
+                        <View style={[styles.carouselContainer, { marginTop: 10, marginBottom: 20 }]}>
+                            <Text style={[styles.sectionTitle, isMobile && { marginLeft: 15 }, { marginBottom: 15 }]}>Servicios de Streaming</Text>
+                            <FlatList horizontal data={ESTUDIOS} keyExtractor={(item) => item.name} showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.flatListContent, isMobile && { paddingLeft: 15, paddingRight: 15 }]}
+                                renderItem={({ item }) => {
+                                    const isActive = selectedStudio === item.query;
+                                    return (
+                                        <TouchableOpacity
+                                            style={[
+                                                isMobile ? { width: 140, height: 80 } : { width: 220, height: 120 },
+                                                { borderRadius: 12, marginRight: 15, backgroundColor: item.color, justifyContent: 'center', alignItems: 'center', borderWidth: isActive ? 2 : 1, borderColor: isActive ? PREMIUM_GOLD : 'rgba(255,255,255,0.1)' }
+                                            ]}
+                                            onPress={() => setSelectedStudio(isActive ? null : item.query)}
+                                        >
+                                            <Image source={{ uri: item.logo }} style={{ width: '60%', height: '60%', opacity: isActive ? 1 : 0.7 }} resizeMode="contain" />
+                                        </TouchableOpacity>
+                                    )
+                                }}
                             />
                         </View>
-                    )}
-                </View>
-            </Animated.ScrollView>
+
+                        {selectedStudio && (
+                            <View style={[styles.catalogWrapper, isMobile && { paddingLeft: 15, paddingRight: 15 }]}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                                    <Text style={[styles.catalogHeaderTitle, { marginBottom: 0 }, isMobile && { fontSize: 20, color: PREMIUM_GOLD }]}>Catálogo de {selectedStudio}</Text>
+                                    <TouchableOpacity onPress={() => setSelectedStudio(null)} style={{ padding: 8, backgroundColor: '#222', borderRadius: 20 }}>
+                                        <Ionicons name="close" size={20} color="#fff" />
+                                    </TouchableOpacity>
+                                </View>
+                                <FilteredGridView
+                                    movies={displayData.filter(m => m.studio && m.studio.toLowerCase().includes(selectedStudio.toLowerCase()))}
+                                    onMoviePress={openMovieDetails}
+                                    isMobile={isMobile}
+                                />
+                            </View>
+                        )}
+                    </View>
+                </Animated.ScrollView>
+            </View>
             {isMobile && <MobileBottomBar currentRoute="Inicio" />}
         </View>
     );
@@ -1850,16 +1962,21 @@ function SearchScreen({ route, navigation }) {
     };
 
     useEffect(() => {
-        Voice.onSpeechStart = () => setIsListening(true);
-        Voice.onSpeechEnd = () => setIsListening(false);
-        Voice.onSpeechError = () => setIsListening(false);
-        Voice.onSpeechResults = (e) => {
-            if (e.value && e.value.length > 0) {
-                setSearchQuery(e.value[0]);
-                setIsListening(false);
-            }
-        };
-        return () => { Voice.destroy().then(Voice.removeAllListeners); };
+        // ESCUDO: Solo usar el micrófono en el celular
+        if (Platform.OS !== 'web' && Voice) {
+            Voice.onSpeechStart = () => setIsListening(true);
+            Voice.onSpeechEnd = () => setIsListening(false);
+            Voice.onSpeechError = () => setIsListening(false);
+            Voice.onSpeechResults = (e) => {
+                if (e.value && e.value.length > 0) {
+                    setSearchQuery(e.value[0]);
+                    setIsListening(false);
+                }
+            };
+            return () => {
+                if (Voice) Voice.destroy().then(Voice.removeAllListeners);
+            };
+        }
     }, []);
 
     useEffect(() => {
@@ -1879,7 +1996,10 @@ function SearchScreen({ route, navigation }) {
     }, [debouncedQuery, displayData]);
 
     const handleVoiceSearch = async () => {
-        if (Platform.OS === 'web') return Alert.alert("Aviso", "Requiere el celular nativo.");
+        if (Platform.OS === 'web') {
+            alert("La búsqueda por voz solo está disponible en la App Móvil.");
+            return;
+        }
         if (isListening) { await Voice.stop(); setIsListening(false); }
         else { setSearchQuery(""); await Voice.start('es-ES'); }
     };
@@ -2055,6 +2175,14 @@ function UserScreen({ navigation }) {
 
     const [editName, setEditName] = useState(user.name);
     const [editPhoto, setEditPhoto] = useState(user.photo);
+    // NUESTRA CARPETA VIRTUAL DE AVATARES PREMIUM
+    const AVATARES_LOCALES = [
+        "https://ui-avatars.com/api/?name=V&background=c1915f&color=000&bold=true",
+        "https://ui-avatars.com/api/?name=M&background=111&color=c1915f&bold=true",
+        "https://ui-avatars.com/api/?name=K&background=ff4444&color=fff&bold=true",
+        "https://ui-avatars.com/api/?name=J&background=003366&color=fff&bold=true",
+        "https://ui-avatars.com/api/?name=S&background=10b981&color=000&bold=true"
+    ];
 
     // 🔥 CERRAR SESIÓN ESTABLE Y SEGURO 🔥
     const handleLogout = () => {
@@ -2124,17 +2252,30 @@ function UserScreen({ navigation }) {
             ) : (
                 /* 🔥 SI YA INICIÓ SESIÓN, MOSTRAMOS EL PERFIL NORMAL 🔥 */
                 <>
-                    {/* MODAL EDITAR PERFIL */}
+                    {/* MODAL EDITAR PERFIL (SELECTOR CERRADO) */}
                     <Modal visible={showEditProfile} transparent={true} animationType="fade">
                         <View style={styles.modalOverlay}>
-                            <View style={styles.modalContainer}>
+                            <View style={[styles.modalContainer, { width: '90%', maxWidth: 400 }]}>
                                 <Text style={styles.modalTitle}>Editar Perfil</Text>
-                                <View style={styles.searchBarWrapper}>
+
+                                <View style={[styles.searchBarWrapper, { marginBottom: 20 }]}>
                                     <TextInput style={styles.searchInput} placeholder="Nombre de Usuario" value={editName} onChangeText={setEditName} placeholderTextColor="#666" />
                                 </View>
-                                <View style={[styles.searchBarWrapper, { marginTop: 15, marginBottom: 25 }]}>
-                                    <TextInput style={styles.searchInput} placeholder="URL de Foto (https://...)" value={editPhoto} onChangeText={setEditPhoto} placeholderTextColor="#666" />
+
+                                <Text style={{ color: '#888', fontSize: 12, marginBottom: 10, alignSelf: 'flex-start' }}>SELECCIONA UN AVATAR</Text>
+
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 25 }}>
+                                    {AVATARES_LOCALES.map((avatar, index) => (
+                                        <TouchableOpacity
+                                            key={index}
+                                            onPress={() => setEditPhoto(avatar)}
+                                            style={{ borderWidth: editPhoto === avatar ? 3 : 0, borderColor: PREMIUM_GOLD, borderRadius: 10, overflow: 'hidden' }}
+                                        >
+                                            <Image source={{ uri: avatar }} style={{ width: 60, height: 60 }} />
+                                        </TouchableOpacity>
+                                    ))}
                                 </View>
+
                                 <View style={styles.modalButtonsRow}>
                                     <TouchableOpacity style={styles.modalBtnSecondary} onPress={() => setShowEditProfile(false)}><Text style={styles.modalBtnSecondaryText}>Cancelar</Text></TouchableOpacity>
                                     <TouchableOpacity style={styles.modalBtnPrimary} onPress={handleSaveProfile}><Text style={styles.modalBtnPrimaryText}>Guardar</Text></TouchableOpacity>
@@ -2163,7 +2304,7 @@ function UserScreen({ navigation }) {
                         <View style={styles.vipProfileHeader}>
                             <TouchableOpacity style={styles.vipAvatarContainer} onPress={() => setShowEditProfile(true)}>
                                 <View style={styles.vipAvatarGlow}>
-                                    <Image source={{ uri: user.photo || 'https://i.pravatar.cc/150?u=suri' }} style={[styles.vipAvatarImage, !isMobile && { width: 180, height: 180, borderRadius: 20 }]} />
+                                    <Image source={{ uri: user.photo || 'https://ui-avatars.com/api/?name=Ǝ&background=c1915f&color=000&bold=true' }} style={[styles.vipAvatarImage, !isMobile && { width: 180, height: 180, borderRadius: 20 }]} />
                                 </View>
                                 <View style={[styles.vipBadgeContainer, !isMobile && { bottom: -15, paddingHorizontal: 20, paddingVertical: 8 }]}>
                                     <Text style={[styles.vipBadgeText, !isMobile && { fontSize: 12 }]}>Socio VIP</Text>
@@ -2345,15 +2486,13 @@ function LinkedDevicesScreen({ navigation }) {
 
                             return (
                                 <View key={dev.device_id} style={styles.linkedDeviceCard}>
-                                    {/* 🔥 FIX: flex: 1 aquí permite que el contenedor izquierdo respete el límite 🔥 */}
-                                    <View style={[styles.linkedDeviceLeft, { flex: 1, paddingRight: 10 }]}>
+                                    <View style={styles.linkedDeviceLeft}>
                                         <View style={{ position: 'relative' }}>
                                             <Image source={{ uri: dynamicAvatar }} style={styles.linkedDeviceAvatar} />
                                             <View style={[styles.linkedDeviceStatusDot, { backgroundColor: '#10b981' }]} />
                                         </View>
-                                        {/* 🔥 FIX: flex: 1 aquí evita que el texto rompa su contenedor 🔥 */}
-                                        <View style={{ marginLeft: 15, justifyContent: 'center', flex: 1 }}>
-                                            <Text style={styles.linkedDeviceName} numberOfLines={1}>{dev.name}</Text>
+                                        <View style={{ marginLeft: 15, justifyContent: 'center' }}>
+                                            <Text style={[styles.linkedDeviceName, { maxWidth: 160 }]} numberOfLines={1}>{dev.name}</Text>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                                                 <Ionicons name="calendar-outline" size={12} color="#888" style={{ marginRight: 5 }} />
                                                 <Text style={styles.linkedDeviceRole}>{dev.last_login}</Text>
@@ -2563,12 +2702,19 @@ function MovieDetailsScreen({ route, navigation }) {
         const fetchColors = async () => {
             try {
                 const targetImage = movie.tmdbThumb || movie.thumb || movie.bgImage;
-                if (!targetImage) return;
-                const result = await ImageColors.getColors(targetImage, { fallback: PREMIUM_GOLD, cache: true, key: movie.id.toString() });
-                if (Platform.OS === 'android') setThemeColor(result.dominant || result.vibrant || PREMIUM_GOLD);
-                else if (Platform.OS === 'ios') setThemeColor(result.primary || PREMIUM_GOLD);
-                else setThemeColor(result.dominant || result.vibrant || PREMIUM_GOLD);
-            } catch (e) { console.log(e); }
+                if (!targetImage || Platform.OS !== 'web') return; // En web lo activamos al 100%
+
+                const result = await ImageColors.getColors(targetImage, {
+                    fallback: PREMIUM_GOLD,
+                    cache: true,
+                    key: movie.id.toString()
+                });
+
+                // En la web, el resultado suele venir en 'vibrant' o 'dominant'
+                setThemeColor(result.dominant || result.vibrant || PREMIUM_GOLD);
+            } catch (e) {
+                setThemeColor(PREMIUM_GOLD);
+            }
         };
         fetchColors();
     }, [movie]);
@@ -2887,8 +3033,17 @@ function CategoryScreen({ route, navigation }) {
 
                 {category === 'Animes' ? (
                     <View style={{ marginTop: 10 }}>
-                        <MovieList title="Series Anime" data={displayData.filter(m => m.type === 'series')} onMoviePress={openMovieDetails} isMobile={isMobile} />
-                        <MovieList title="Películas Anime" data={displayData.filter(m => m.type === 'movie')} onMoviePress={openMovieDetails} isMobile={isMobile} />
+                        {displayData.length > 0 ? (
+                            <>
+                                {displayData.filter(m => m.type === 'series').length > 0 && <MovieList title="Series Anime" data={displayData.filter(m => m.type === 'series')} onMoviePress={openMovieDetails} isMobile={isMobile} />}
+                                {displayData.filter(m => m.type === 'movie').length > 0 && <MovieList title="Películas Anime" data={displayData.filter(m => m.type === 'movie')} onMoviePress={openMovieDetails} isMobile={isMobile} />}
+                            </>
+                        ) : (
+                            <View style={{ padding: 40, alignItems: 'center', marginTop: 30 }}>
+                                <Ionicons name="color-palette-outline" size={50} color="#333" />
+                                <Text style={{ color: '#666', marginTop: 15, fontSize: 16 }}>No hay animes en tu servidor.</Text>
+                            </View>
+                        )}
                     </View>
                 ) : (
                     displayData.length > 0 ? (
@@ -2927,32 +3082,29 @@ function HistoryScreen({ navigation }) {
 }
 
 // --- 5. NAVEGADORES (VERSIÓN TV PREMIUM MINIMALISTA Y TRANSPARENTE) ---
-
 function CustomDrawerContent(props) {
     const currentRoute = props.state?.routeNames[props.state.index];
+    // 🔥 MAGIA: Conectamos el cerebro para saber quién está usando la app
+    const { user } = useContext(AppContext);
 
     return (
-        // 🟢 Contenedor fijo sin eventos de ratón (Intocable)
         <View style={styles.drawerGlass}>
             <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
 
             <View style={{ paddingTop: 30, flex: 1, overflow: 'hidden' }}>
                 <View style={styles.drawerAvatarContainer}>
-                    <Image source={{ uri: 'https://i.pravatar.cc/150?img=32' }} style={styles.drawerAvatar} />
-                    <Text style={styles.drawerUserName} numberOfLines={1}></Text>
+                    {/* AHORA USA EL AVATAR Y NOMBRE REAL DEL USUARIO */}
+                    <Image source={{ uri: user?.photo || 'https://ui-avatars.com/api/?name=Ǝ&background=c1915f&color=000&bold=true' }} style={styles.drawerAvatar} />
+                    <Text style={styles.drawerUserName} numberOfLines={1}>{user?.name || 'Invitado'}</Text>
                 </View>
 
                 <View style={{ width: '100%', gap: 10 }}>
                     <DrawerItem icon="home-variant" label="Inicio" focused={currentRoute === 'Inicio'} onPress={() => props.navigation.navigate('Inicio')} />
                     <DrawerItem icon="movie-play-outline" label="Películas" focused={currentRoute === 'Películas'} onPress={() => props.navigation.navigate('Películas')} />
                     <DrawerItem icon="television-classic" label="Series" focused={currentRoute === 'Serie'} onPress={() => props.navigation.navigate('Serie')} />
-
-                    {/* 🟢 Añadidos los botones de Novelas y Animes */}
                     <DrawerItem icon="heart-outline" label="Novelas" focused={currentRoute === 'Novelas'} onPress={() => props.navigation.navigate('Novelas')} />
                     <DrawerItem icon="palette-outline" label="Animes" focused={currentRoute === 'Animes'} onPress={() => props.navigation.navigate('Animes')} />
-
                     <View style={{ height: 15 }} />
-
                     <DrawerItem icon="compass-outline" label="Descubrir" focused={currentRoute === 'Buscar'} onPress={() => props.navigation.navigate('Buscar')} />
                     <DrawerItem icon="account-circle-outline" label="Usuario" focused={currentRoute === 'Usuario'} onPress={() => props.navigation.navigate('Usuario')} />
                 </View>
@@ -3196,10 +3348,19 @@ function AuthScreen({ navigation }) {
                     const finalName = profileData.username || cleanEmail.split('@')[0];
 
                     // 3. EXTRAER ID LOCAL Y OCULTAR MARCA
-                    let hwId = 'web-device';
-                    if (Platform.OS === 'android') hwId = Application.androidId;
-                    else if (Platform.OS === 'ios') hwId = await Application.getIosIdForVendorAsync();
-
+                    let hwId = 'web-visitor';
+                    if (Platform.OS === 'android') {
+                        hwId = Application.androidId;
+                    } else if (Platform.OS === 'ios') {
+                        hwId = await Application.getIosIdForVendorAsync();
+                    } else {
+                        // 🔥 SOLUCIÓN: Guardamos el ID del navegador para no generar uno nuevo en cada F5
+                        hwId = await AsyncStorage.getItem('vertex_web_id');
+                        if (!hwId) {
+                            hwId = 'browser-' + Math.random().toString(36).substr(2, 9);
+                            await AsyncStorage.setItem('vertex_web_id', hwId);
+                        }
+                    }
                     // 4. REGISTRAR DISPOSITIVO (Usamos tu nombre, no la marca del celular)
                     const deviceRes = await fetch(`${BACKEND_URL}/api/dispositivos/`, {
                         method: 'POST',
