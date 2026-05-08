@@ -16,7 +16,19 @@ import { MaterialCommunityIcons, Ionicons, Octicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import ImageColors from 'react-native-image-colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store'; // 🔥 FIX: Bóveda de encriptación militar
 import * as SplashScreen from 'expo-splash-screen';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+// 🔥 NUEVO: Triada de tareas y escudo Anti-Sueño
+import * as TaskManager from 'expo-task-manager';
+import * as BackgroundFetch from 'expo-background-fetch';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { Video as ExpoVideo } from 'expo-av';
+
+WebBrowser.maybeCompleteAuthSession();
+
+// 🛑 ESCUDO ANTI-EXPO GO: Cargamos lo móvil solo si NO es web
 
 // 🛑 ESCUDO ANTI-EXPO GO: Cargamos lo móvil solo si NO es web
 let Voice, FileSystem, MediaLibrary, Notifications, Brightness, ScreenOrientation, Application, Device, Network, Video;
@@ -42,33 +54,45 @@ if (Platform.OS !== 'web') {
             shouldSetBadge: false,
         }),
     });
+    // 🟢 1. REPRODUCTOR WEB CORREGIDO (Permite adelantar con el Slider)
 } else {
-    // 🔥 EL MOTOR WEB PURO (HTML5) CON TRADUCTOR DE CONTROLES 🔥
     Video = React.forwardRef(({ source, style, paused, onProgress, onLoad, resizeMode }, ref) => {
-        const internalRef = useRef(null);
+        const videoRef = useRef(null);
 
-        // Puente para que el Slider de React Native pueda adelantar el video web
         React.useImperativeHandle(ref, () => ({
             seek: (time) => {
-                if (internalRef.current) internalRef.current.currentTime = time;
+                if (videoRef.current) videoRef.current.currentTime = time;
             }
         }));
 
-        const objectFit = resizeMode === 'cover' ? 'cover' : (resizeMode === 'stretch' ? 'fill' : 'contain');
-
         return (
             <video
-                ref={internalRef}
+                ref={videoRef}
                 src={source?.uri}
-                style={{ ...style, objectFit, width: '100%', height: '100%', outline: 'none', backgroundColor: '#000' }}
+                style={{ ...style, objectFit: resizeMode === 'cover' ? 'cover' : 'contain', width: '100%', height: '100%', backgroundColor: '#000' }}
                 autoPlay={!paused}
-                controls={false}
                 onTimeUpdate={(e) => onProgress && onProgress({ currentTime: e.target.currentTime })}
                 onLoadedMetadata={(e) => onLoad && onLoad({ duration: e.target.duration })}
             />
         );
     });
 }
+// 🔥 HACK PREMIUM: Forzar que el Autocompletado de Chrome sea Oscuro en Web 🔥
+if (Platform.OS === 'web') {
+    const style = document.createElement('style');
+    style.textContent = `
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover, 
+        input:-webkit-autofill:focus, 
+        input:-webkit-autofill:active{
+            -webkit-box-shadow: 0 0 0 30px #111111 inset !important;
+            -webkit-text-fill-color: white !important;
+            transition: background-color 5000s ease-in-out 0s;
+        }
+    `;
+    document.head.append(style);
+}
+
 // ==========================================
 // CONSTANTES Y VARIABLES GLOBALES
 // ==========================================
@@ -129,6 +153,108 @@ const POPULAR_GENRES = [
 
 // 🧠 CEREBRO GLOBAL UNIFICADO (ESTADO DE LA APP)
 // ==========================================
+function ReproductorTV({ route, navigation }) {
+    const params = route.params || {};
+    const { stream_url, nombre } = params;
+
+    // 🔥 NUEVO: Estados para guardar los canales que vienen de Django
+    const [canalesLive, setCanalesLive] = useState([]);
+    const [cargando, setCargando] = useState(true);
+
+    // 🔥 NUEVO: Función que va a buscar a tu servidor Django
+    useEffect(() => {
+        // Solo buscamos si estamos en la pantalla de la parrilla
+        if (!stream_url) {
+            const cargarCanales = async () => {
+                try {
+                    // Llama a la ruta que creamos en tu backend
+                    const response = await fetch(`${BACKEND_URL}/api/canales_tv/`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        setCanalesLive(data);
+                    }
+                } catch (error) {
+                    console.log("No se pudieron cargar los canales", error);
+                } finally {
+                    setCargando(false);
+                }
+            };
+            cargarCanales();
+        }
+    }, [stream_url]);
+
+    // 🛑 SI NO HAY CANAL SELECCIONADO -> MOSTRAR LA PARRILLA
+    if (!stream_url) {
+        return (
+            <View style={{ flex: 1, backgroundColor: '#050505', paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 20 }}>
+
+                {/* 🔥 AQUÍ ESTÁ EL NUEVO BOTÓN DE REGRESO PARA LA PARRILLA 🔥 */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, marginRight: 15 }}>
+                        <Ionicons name="arrow-back" size={24} color="#ffffff" />
+                    </TouchableOpacity>
+                    <Text style={{ color: '#c1915f', fontSize: 26, fontWeight: 'bold', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 1 }}>
+                        TELEVISIÓN EN VIVO
+                    </Text>
+                </View>
+
+                {cargando ? (
+                    <ActivityIndicator size="large" color="#c1915f" style={{ marginTop: 50 }} />
+                ) : canalesLive.length === 0 ? (
+                    <Text style={{ color: '#888', textAlign: 'center', marginTop: 50 }}>No hay canales disponibles en este momento.</Text>
+                ) : (
+                    <FlatList
+                        data={canalesLive}
+                        keyExtractor={item => item.id.toString()}
+                        numColumns={2}
+                        columnWrapperStyle={{ justifyContent: 'space-between' }}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity
+                                style={{ width: '48%', backgroundColor: '#111', borderRadius: 12, padding: 20, alignItems: 'center', marginBottom: 15, borderWidth: 1, borderColor: 'rgba(193, 145, 95, 0.3)' }}
+                                onPress={() => {
+                                    if (item.stream_url) {
+                                        navigation.navigate('TV en Vivo', { stream_url: item.stream_url, nombre: item.nombre });
+                                    } else {
+                                        Alert.alert("Aviso", "Canal fuera del aire temporalmente.");
+                                    }
+                                }}
+                            >
+                                <Image source={{ uri: item.logo || 'https://placehold.co/100x100/111/c1915f/png?text=TV' }} style={{ width: 70, height: 70, resizeMode: 'contain', marginBottom: 15 }} />
+                                <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center', fontSize: 13 }}>{item.nombre}</Text>
+                            </TouchableOpacity>
+                        )}
+                    />
+                )}
+            </View>
+        );
+    }
+
+    // 🟢 SI YA SELECCIONÓ UN CANAL -> MOSTRAR EL REPRODUCTOR DE VIDEO
+    return (
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+            <View style={{ position: 'absolute', top: Platform.OS === 'ios' ? 50 : 30, left: 20, zIndex: 100 }}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 }}>
+                    <Ionicons name="arrow-back" size={24} color="#ffffff" />
+                </TouchableOpacity>
+            </View>
+
+            <Text style={{ color: '#D4AF37', fontSize: 18, textAlign: 'center', marginTop: Platform.OS === 'ios' ? 60 : 40, fontWeight: 'bold', letterSpacing: 1 }}>
+                {nombre.toUpperCase()}
+            </Text>
+
+            <View style={{ flex: 1, justifyContent: 'center' }}>
+                <ExpoVideo
+                    source={{ uri: stream_url }}
+                    useNativeControls
+                    resizeMode="contain"
+                    shouldPlay
+                    style={{ width: '100%', height: '85%' }}
+                />
+            </View>
+        </View>
+    );
+}
+
 export const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
@@ -145,7 +271,11 @@ export const AppProvider = ({ children }) => {
     const [offset, setOffset] = useState(0);
 
     const [isAppReady, setIsAppReady] = useState(false);
+
+    // 🔥 AÑADE ESTA LÍNEA AQUÍ 🔥
     const [isOfflineMode, setIsOfflineMode] = useState(false);
+
+    const [dailyHistory, setDailyHistory] = useState({ date: new Date().toDateString(), watched: [] });
 
     // 🔥 EL ARRANQUE SINCRONIZADO Y VALIDACIÓN DE SESIÓN (JWT) 🔥
     useEffect(() => {
@@ -168,9 +298,17 @@ export const AppProvider = ({ children }) => {
                 if (wl) setWatchlist(JSON.parse(wl));
                 if (dl) setCompletedDownloads(JSON.parse(dl));
 
+                // 🔥 NUEVO: Leer el historial diario (FREEMIUM) 🔥
+                const dh = await AsyncStorage.getItem('vertex_daily');
+                if (dh) {
+                    const parsedDh = JSON.parse(dh);
+                    if (parsedDh.date === new Date().toDateString()) setDailyHistory(parsedDh);
+                    else setDailyHistory({ date: new Date().toDateString(), watched: [] }); // Resetea si es un nuevo día
+                }
+
                 // 🔥 MAGIA DE SEGURIDAD: VERIFICAMOS SI YA HABÍA INICIADO SESIÓN ANTES 🔥
                 if (hasInternet) {
-                    const savedToken = await AsyncStorage.getItem('vertex_access');
+                    const savedToken = await SecureStore.getItemAsync('vertex_access'); // 🔒 Leemos de la caja fuerte
                     if (savedToken) {
                         try {
                             const profileRes = await fetch(`${BACKEND_URL}/api/perfil/`, {
@@ -189,8 +327,8 @@ export const AppProvider = ({ children }) => {
                                 setIsLoggedIn(true); // Token válido: ¡Pasa directo sin pedir clave!
                             } else {
                                 // El token expiró o es inválido, limpiamos y lo mandamos a login
-                                await AsyncStorage.removeItem('vertex_access');
-                                await AsyncStorage.removeItem('vertex_refresh');
+                                await SecureStore.deleteItemAsync('vertex_access');
+                                await SecureStore.deleteItemAsync('vertex_refresh');
                                 setIsLoggedIn(false);
                             }
                         } catch (e) {
@@ -226,6 +364,48 @@ export const AppProvider = ({ children }) => {
     useEffect(() => { if (isAppReady) AsyncStorage.setItem('vertex_wl', JSON.stringify(watchlist)); }, [watchlist, isAppReady]);
     useEffect(() => { if (isAppReady) AsyncStorage.setItem('vertex_dl', JSON.stringify(completedDownloads)); }, [completedDownloads, isAppReady]);
 
+    const attemptPlay = async (movie, proceedToPlay) => {
+        // REGLA 1: Si no hay cuenta, no hay video. Mandamos a Login.
+        if (!isLoggedIn) {
+            Alert.alert("Acceso Restringido", "Debes iniciar sesión para acceder a los 5 videos gratuitos diarios.");
+            navigation.navigate('Auth');
+            return;
+        }
+
+        // REGLA 2: Los VIP no tienen límites
+        if (user.isVip || user.vipDays > 0) {
+            proceedToPlay();
+            return;
+        }
+
+        const today = new Date().toDateString();
+        let currentHistory = { ...dailyHistory };
+
+        if (currentHistory.date !== today) {
+            currentHistory = { date: today, watched: [] };
+        }
+
+        const finalId = movie.jellyfin_id || movie.id;
+
+        // Si ya vio este video hoy, no consume crédito
+        if (currentHistory.watched.includes(finalId)) {
+            proceedToPlay();
+            return;
+        }
+        // Nota: El historial ya está vinculado al dispositivo mediante AsyncStorage
+        if (currentHistory.watched.length >= 5) {
+            setShowVipModal(true);
+            return;
+        }
+
+        const newWatched = [...currentHistory.watched, finalId];
+        const updatedHistory = { date: today, watched: newWatched };
+        setDailyHistory(updatedHistory);
+        await AsyncStorage.setItem('vertex_daily', JSON.stringify(updatedHistory));
+
+        proceedToPlay();
+    };
+
     // 2. EXTRACCIÓN AVANZADA DE DATOS (JELLYFIN PREMIUM)
     const fetchJellyfinData = async (isLoadMore = false) => {
         try {
@@ -243,7 +423,8 @@ export const AppProvider = ({ children }) => {
             const moviesRes = await fetch(url, { headers: authHeader });
             const moviesData = await moviesRes.json();
 
-            const fallbackBg = "https://via.placeholder.com/500x750/111111/c1915f?text=VERT%C6%8EX";
+            // 🔥 FIX: Usamos un placeholder más estable y con diseño acorde a VERTƎX
+            const fallbackBg = "https://placehold.co/500x750/111111/c1915f/png?text=VERT%C6%8EX";
 
             const formattedMovies = moviesData.Items.map(item => {
 
@@ -431,9 +612,20 @@ export const AppProvider = ({ children }) => {
         setupPermissions();
     }, []);
 
-    // 6. GESTOR DE COLA
+    // 6. GESTOR DE COLA E INMORTALIDAD DE DESCARGAS 🔥
     useEffect(() => {
         const activeCount = Object.keys(activeDownloads).length;
+
+        // 🛡️ ESCUDO ANTI-SUEÑO: Mientras haya descargas, la app se mantiene viva y despierta
+        if (Platform.OS !== 'web') {
+            if (activeCount > 0) {
+                activateKeepAwakeAsync();
+            } else {
+                deactivateKeepAwake();
+            }
+        }
+
+        // Lógica de avance de cola
         if (activeCount < user.downloadLimit && downloadQueue.length > 0) {
             const nextItem = downloadQueue[0];
             setDownloadQueue(prev => prev.slice(1));
@@ -554,6 +746,7 @@ export const AppProvider = ({ children }) => {
             user, updateUserData,
             completedDownloads, deleteCompletedDownload,
             startDownloadProcess, cancelDownload,
+            attemptPlay, // 👈 ¡AQUÍ ESTÁ LA NUEVA FUNCIÓN AÑADIDA!
             activeDownloads, setActiveDownloads,
             downloadQueue, setDownloadQueue,
             jellyfinMovies, fetchJellyfinData,
@@ -563,7 +756,6 @@ export const AppProvider = ({ children }) => {
             showVipModal, setShowVipModal
         }}>
             {children}
-
             <Modal visible={showDataModal} transparent={true} animationType="fade">
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalContainer, { borderColor: PREMIUM_GOLD, borderWidth: 1 }]}>
@@ -689,28 +881,7 @@ const MovieList = ({ title, data, onMoviePress, isMobile, onFocusChange }) => {
     );
 };
 
-const FilteredGridView = ({ movies, onMoviePress, isMobile }) => {
-    if (!movies || !Array.isArray(movies) || movies.length === 0) {
-        return (
-            <View style={{ padding: 20, alignItems: 'center' }}>
-                <Text style={{ color: '#555', fontStyle: 'italic' }}>Intenta con otro título o género.</Text>
-            </View>
-        );
-    }
-    return (
-        <View style={[styles.gridContainer, isMobile && { justifyContent: 'space-between' }]}>
-            {movies.map((movie, index) => (
-                <FocusableMovieCard
-                    key={`grid-${movie.id}-${index}`}
-                    movie={movie}
-                    isMobile={isMobile}
-                    onPress={onMoviePress}
-                    customStyle={[styles.gridPosterCard, isMobile && { width: '31%', marginRight: 0, height: 170 }]}
-                />
-            ))}
-        </View>
-    );
-};
+
 
 
 
@@ -750,45 +921,118 @@ const MobileBottomBar = ({ currentRoute }) => {
             <View style={styles.mobileBarItems}>
                 <BottomTab icon="home-variant" label="Inicio" active={currentRoute === 'Inicio'} onPress={() => navigation.navigate('Inicio')} />
                 <BottomTab icon="play-box-outline" label="Bóveda" active={currentRoute === 'Mi Espacio'} onPress={() => navigation.navigate('Mi Espacio')} />
+
+                {/* La TV en el centro */}
+                <BottomTab icon="television-play" label="TV" active={currentRoute === 'TV en Vivo'} onPress={() => navigation.navigate('TV en Vivo')} />
+
+                {/* 🔥 ¡AQUÍ REGRESA LA LUPA! 🔥 */}
                 <BottomTab icon="compass-outline" label="Descubrir" active={currentRoute === 'Buscar'} onPress={() => navigation.navigate('Buscar')} />
+
                 <BottomTab icon="account-circle-outline" label="Usuario" active={currentRoute === 'Usuario'} onPress={() => navigation.navigate('Usuario')} />
             </View>
         </View>
     );
 };
+// 🔥 NUEVO COMPONENTE: ESTADO VACÍO INMERSIVO (CERO BORDES) 🔥
+const EmptyState = ({ icon, title, message, buttonText, onAction }) => (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40, marginTop: 20 }}>
+        {/* Ícono gigante difuminado en el fondo */}
+        <View style={{ position: 'absolute', opacity: 0.03, transform: [{ scale: 2.5 }] }}>
+            <Ionicons name={icon} size={150} color="#fff" />
+        </View>
+        <Ionicons name={icon} size={50} color="#333" style={{ marginBottom: 15 }} />
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 1, marginBottom: 8, textAlign: 'center' }}>{title}</Text>
+        <Text style={{ color: '#666', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 25 }}>{message}</Text>
+        {buttonText && onAction && (
+            <TouchableOpacity style={{ backgroundColor: 'rgba(193, 145, 95, 0.1)', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 30 }} onPress={onAction}>
+                <Text style={{ color: PREMIUM_GOLD, fontWeight: 'bold', fontSize: 12, letterSpacing: 1 }}>{buttonText}</Text>
+            </TouchableOpacity>
+        )}
+    </View>
+);
 
 const FocusableMovieCard = ({ movie, isMobile, onPress, onFocusChange, customStyle, forceWidth, forceHeight }) => {
     const [isFocused, setIsFocused] = useState(false);
     const [imgError, setImgError] = useState(false);
+    const { width } = useWindowDimensions();
 
-    const handleFocus = () => { setIsFocused(true); if (onFocusChange && !isMobile) onFocusChange(movie); };
+    const handleFocus = () => {
+        setIsFocused(true);
+        if (onFocusChange && !isMobile) onFocusChange(movie);
+    };
     const handleBlur = () => setIsFocused(false);
 
-    const imageUrl = imgError || !movie.thumb ? movie.tmdbThumb : movie.thumb;
-    const isPlaceholder = !imageUrl || imageUrl.includes('placeholder') || imgError;
-
-    // 🔥 TAMAÑOS DINÁMICOS: Si la vista pide un tamaño forzado (como la cuadrícula), lo usa.
-    const cardWidth = forceWidth || (isMobile ? 110 : 125);
-    const cardHeight = forceHeight || (isMobile ? 165 : 185);
+    const dynamicWidth = isMobile ? (width - 50) / 3 : 130;
+    const dynamicHeight = dynamicWidth * 1.5;
 
     return (
-        <View style={[{ width: cardWidth, marginRight: 15, marginBottom: 15 }, customStyle, { height: 'auto', backgroundColor: 'transparent' }]}>
+        <View style={[{ width: forceWidth || dynamicWidth, marginRight: 10, marginBottom: 15 }, customStyle]}>
             <Pressable
+                // 🔥 CONFIGURACIÓN NATIVA PARA TV 🔥
+                focusable={true}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
                 onPress={() => onPress && onPress(movie)}
-                onFocus={handleFocus} onBlur={handleBlur} onHoverIn={handleFocus} onHoverOut={handleBlur}
-                style={[styles.posterCard, { width: '100%', height: cardHeight, marginRight: 0, marginBottom: 0 }, isFocused && { borderColor: PREMIUM_GOLD, borderWidth: 3, transform: [{ scale: 1.05 }], zIndex: 10 }]}
+
+                // Animación de hundimiento al presionar (Feedback táctil y de control)
+                style={({ pressed }) => [
+                    styles.posterCard,
+                    { width: '100%', height: forceHeight || dynamicHeight, backgroundColor: 'transparent' },
+                    isFocused && {
+                        borderColor: PREMIUM_GOLD,
+                        borderWidth: 3,
+                        transform: [{ scale: 1.1 }], // El póster crece más en TV al enfocarlo
+                        zIndex: 50,
+                        elevation: 20, // Sombra profunda en Android TV
+                    },
+                    pressed && { transform: [{ scale: 0.95 }] }
+                ]}
             >
-                {!isPlaceholder ? (
-                    <ExpoImage source={{ uri: imageUrl }} style={styles.posterImage} contentFit="cover" transition={300} onError={() => setImgError(true)} />
-                ) : (
-                    <View style={{ flex: 1, backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center', padding: 10, borderWidth: 1, borderColor: '#333' }}>
-                        <Ionicons name="film-outline" size={24} color="rgba(193, 145, 95, 0.4)" style={{ marginBottom: 10 }} />
-                        <Text style={{ color: '#fff', fontSize: 10, textAlign: 'center', fontWeight: 'bold' }} numberOfLines={3}>{movie.title}</Text>
-                    </View>
+                <ExpoImage
+                    source={{ uri: imgError || !movie.thumb ? movie.tmdbThumb : movie.thumb }}
+                    style={styles.posterImage}
+                    contentFit="cover"
+                    transition={300}
+                    onError={() => setImgError(true)}
+                />
+
+                {/* Resplandor dorado interno solo cuando está enfocado */}
+                {isFocused && (
+                    <LinearGradient
+                        colors={['rgba(193, 145, 95, 0.4)', 'transparent']}
+                        style={StyleSheet.absoluteFillObject}
+                    />
                 )}
-                {isFocused && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(193,145,95,0.2)' }} pointerEvents="none" />}
             </Pressable>
-            <Text style={{ color: '#ccc', fontSize: 12, marginTop: 8, textAlign: 'center', fontWeight: '600' }} numberOfLines={2}>{movie.title}</Text>
+            <Text style={{ color: isFocused ? '#fff' : '#aaa', fontSize: 11, marginTop: 6, textAlign: 'center', fontWeight: isFocused ? 'bold' : '500' }} numberOfLines={1}>
+                {movie.title}
+            </Text>
+        </View>
+    );
+};
+
+const FilteredGridView = ({ movies, onMoviePress, isMobile }) => {
+    const { width } = useWindowDimensions();
+    if (!movies || !Array.isArray(movies) || movies.length === 0) {
+        return <EmptyState icon="film-outline" title="BÓVEDA VACÍA" message="No se encontraron títulos con estos filtros. Intenta explorar otras categorías." />;
+    }
+
+    // Forzamos el ancho para que la cuadrícula siempre tenga 3 perfectos
+    const itemWidth = isMobile ? (width - 50) / 3 : 140;
+
+    return (
+        <View style={[styles.gridContainer, isMobile && { justifyContent: 'flex-start', gap: 10 }]}>
+            {movies.map((movie, index) => (
+                <FocusableMovieCard
+                    key={`grid-${movie.id}-${index}`}
+                    movie={movie}
+                    isMobile={isMobile}
+                    onPress={onMoviePress}
+                    forceWidth={itemWidth}
+                    forceHeight={itemWidth * 1.5}
+                    customStyle={{ marginRight: 0, marginBottom: 20 }}
+                />
+            ))}
         </View>
     );
 };
@@ -994,73 +1238,90 @@ const ResumeModal = ({ visible, onClose, onResume, onRestart, onChangeQuality, p
     </Modal>
 );
 
-// 🔥 MODAL: EL MURO DE PAGO VIP (SIGILOSO - SOLO PIN) 🔥
+// 🔥 MODAL: EL MURO DE PAGO VIP (DISEÑO FREEMIUM ELEGANTE) 🔥
 const VipLockModal = () => {
     const { showVipModal, setShowVipModal, updateUserData } = useContext(AppContext);
     const [pinInput, setPinInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [showPinBox, setShowPinBox] = useState(false); // 👈 Controla si mostramos botones o el input
 
     if (!showVipModal) return null;
 
     const handleRedeem = async () => {
-        if (pinInput.trim().length < 6) {
-            Alert.alert("Aviso", "El PIN debe tener al menos 6 caracteres.");
-            return;
-        }
+        if (pinInput.trim().length < 6) { Alert.alert("Aviso", "El código debe tener al menos 6 caracteres."); return; }
         setIsLoading(true);
         try {
+            // Extraemos la Huella del Dispositivo
+            let hwId = 'web-visitor';
+            if (Platform.OS === 'android') hwId = Application.androidId;
+            else if (Platform.OS === 'ios') hwId = await Application.getIosIdForVendorAsync();
+            else hwId = await AsyncStorage.getItem('vertex_web_id') || 'web-visitor';
+
             const token = await AsyncStorage.getItem('vertex_access');
             const response = await fetch(`${BACKEND_URL}/api/canjear-pin/`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ pin: pinInput })
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ pin: pinInput, device_id: hwId }) // 🔥 AQUÍ ENVIAMOS LA HUELLA
             });
             const data = await response.json();
 
             if (response.ok && data.status === "success") {
                 Alert.alert("¡Bienvenido a VERTƎX VIP!", data.message);
                 updateUserData({ vipDays: data.vip_days_left, isVip: true });
-                setShowVipModal(false);
-                setPinInput('');
+                setShowVipModal(false); setPinInput(''); setShowPinBox(false);
             } else {
-                Alert.alert("PIN Inválido", data.message || "Este código no existe o ya fue usado.");
+                Alert.alert("Error de Código", data.message || "Este código no existe o ya fue usado por alguien más.");
             }
-        } catch (e) {
-            Alert.alert("Error", "Servidor no responde. Revisa tu conexión.");
-        } finally {
-            setIsLoading(false);
-        }
+        } catch (e) { Alert.alert("Error", "Servidor no responde. Revisa tu conexión."); }
+        finally { setIsLoading(false); }
     };
 
     return (
         <Modal visible={showVipModal} transparent={true} animationType="slide">
-            <View style={styles.qualityModalOverlay}>
-                <View style={[styles.qualityModalBox, { padding: 25 }]}>
-                    <Ionicons name="lock-closed" size={50} color={PREMIUM_GOLD} style={{ alignSelf: 'center', marginBottom: 15 }} />
-                    <Text style={styles.qualityModalTitle}>ACCESO RESTRINGIDO</Text>
-                    <Text style={styles.qualityModalText}>Para reproducir este contenido necesitas sincronizar tu cuenta con un PIN de acceso activo.</Text>
+            {/* Efecto de cristal ultra oscuro para sumergir al usuario */}
+            <BlurView intensity={90} tint="dark" style={styles.qualityModalOverlay}>
+                <View style={[styles.qualityModalBox, { padding: 35, width: '90%', maxWidth: 420, backgroundColor: '#050505', borderColor: 'rgba(193, 145, 95, 0.4)', borderWidth: 1 }]}>
 
-                    <View style={styles.authInputWrapper}>
-                        <Ionicons name="keypad-outline" size={20} color="#888" style={styles.authInputIcon} />
-                        <TextInput
-                            style={[styles.authInput, { textTransform: 'uppercase' }]}
-                            placeholder="Ingresa tu PIN aquí"
-                            placeholderTextColor="#666"
-                            value={pinInput}
-                            onChangeText={setPinInput}
-                            autoCapitalize="characters"
-                        />
-                    </View>
+                    <Ionicons name="diamond" size={60} color={PREMIUM_GOLD} style={{ alignSelf: 'center', marginBottom: 15 }} />
+                    <Text style={[styles.qualityModalTitle, { fontSize: 26, fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 1 }]}>LÍMITE DIARIO ALCANZADO</Text>
+                    <Text style={[styles.qualityModalText, { fontSize: 14, lineHeight: 22, color: '#ccc', marginBottom: 30 }]}>
+                        Has disfrutado tus 2 contenidos gratuitos de hoy. Pásate a VIP para obtener acceso ilimitado, descargas offline y máxima calidad.
+                    </Text>
 
-                    <TouchableOpacity style={[styles.authBtnPrimary, isLoading && { opacity: 0.7 }]} onPress={handleRedeem} disabled={isLoading}>
-                        {isLoading ? <ActivityIndicator color="#000" /> : <Text style={styles.authBtnPrimaryText}>SINCRONIZAR PIN</Text>}
-                    </TouchableOpacity>
+                    {!showPinBox ? (
+                        <View style={{ width: '100%' }}>
+                            <TouchableOpacity style={[styles.authBtnPrimary, { height: 60, marginBottom: 15 }]} onPress={() => Linking.openURL("http://192.168.0.128:5500/checkout.html")}>
+                                <Text style={[styles.authBtnPrimaryText, { fontSize: 16 }]}>DESBLOQUEAR ACCESO VIP</Text>
+                            </TouchableOpacity>
 
-                    <TouchableOpacity style={{ marginTop: 25 }} onPress={() => setShowVipModal(false)}>
-                        <Text style={{ color: '#888', fontSize: 12, fontWeight: 'bold', textAlign: 'center' }}>VOLVER AL CATÁLOGO</Text>
+                            <TouchableOpacity style={[styles.qualityBtnSecondary, { height: 50, borderColor: 'rgba(255,255,255,0.1)' }]} onPress={() => setShowPinBox(true)}>
+                                <Ionicons name="gift-outline" size={18} color="#fff" style={{ marginRight: 10 }} />
+                                <Text style={styles.qualityBtnSecondaryText}>Tengo un código de regalo</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <View style={{ width: '100%', animation: 'fade' }}>
+                            <View style={[styles.authInputWrapper, { backgroundColor: '#111' }]}>
+                                <Ionicons name="keypad-outline" size={20} color={PREMIUM_GOLD} style={styles.authInputIcon} />
+                                <TextInput
+                                    style={[styles.authInput, { textTransform: 'uppercase', color: PREMIUM_GOLD, fontWeight: 'bold' }]}
+                                    placeholder="INGRESA TU CÓDIGO" placeholderTextColor="#666"
+                                    value={pinInput} onChangeText={setPinInput} autoCapitalize="characters"
+                                />
+                            </View>
+                            <TouchableOpacity style={[styles.authBtnPrimary, isLoading && { opacity: 0.7 }]} onPress={handleRedeem} disabled={isLoading}>
+                                {isLoading ? <ActivityIndicator color="#000" /> : <Text style={styles.authBtnPrimaryText}>CANJEAR AHORA</Text>}
+                            </TouchableOpacity>
+                            <TouchableOpacity style={{ marginTop: 20, alignSelf: 'center' }} onPress={() => setShowPinBox(false)}>
+                                <Text style={{ color: '#888', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase' }}>Volver atrás</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    <TouchableOpacity style={{ marginTop: 40 }} onPress={() => { setShowVipModal(false); setShowPinBox(false); }}>
+                        <Text style={{ color: '#555', fontSize: 11, fontWeight: 'bold', textAlign: 'center', letterSpacing: 1 }}>CERRAR Y VOLVER AL CATÁLOGO</Text>
                     </TouchableOpacity>
                 </View>
-            </View>
+            </BlurView>
         </Modal>
     );
 };
@@ -1175,13 +1436,13 @@ const LicensesModal = ({ visible, onClose }) => (
 // 3. REPRODUCTOR DE VIDEO (MOTOR HÍBRIDO PREMIUM)
 // ==========================================
 function VideoPlayerScreen({ route, navigation }) {
-    const { updateContinueWatching, setShowCastModal } = useContext(AppContext); // 🔥 Agregamos Cast
-    const { movie, startAt = 0, selectedQuality } = route.params;
-    // 🔥 FIX: CREAR LA URL DE TRANSMISIÓN 🔥
+    const { updateContinueWatching, setShowCastModal } = useContext(AppContext);
+    // 🔥 Recibimos seriesData
+    const { movie, seriesData, startAt = 0, selectedQuality } = route.params;
+
     const finalJellyfinId = movie?.jellyfin_id || (String(movie?.id).startsWith('jf_') ? String(movie.id).replace('jf_', '') : movie?.id);
     let streamUrl = `${JELLYFIN_URL}/Items/${finalJellyfinId}/Download?api_key=${JELLYFIN_API_KEY}`;
 
-    // Si tienes el mapa de fuentes (el "cerebro" de calidades), usamos la calidad seleccionada
     if (movie?.sourcesMap && movie.sourcesMap[selectedQuality]) {
         streamUrl = `${JELLYFIN_URL}/Videos/${finalJellyfinId}/stream.mp4?Static=true&MediaSourceId=${movie.sourcesMap[selectedQuality]}&api_key=${JELLYFIN_API_KEY}`;
     }
@@ -1192,6 +1453,22 @@ function VideoPlayerScreen({ route, navigation }) {
     const timeoutRef = useRef(null);
     const hideGestureTimer = useRef(null);
     const lastUIUpdateTime = useRef(0);
+
+    // 🔥 FIX: RECOLECTOR DE BASURA (Previene el Audio Fantasma)
+    useEffect(() => {
+        return () => {
+            // Esta función se ejecuta EXACTAMENTE cuando el usuario sale de la pantalla
+            if (videoRef.current) {
+                if (Platform.OS === 'web') {
+                    videoRef.current.pause(); // Forzamos la pausa
+                    videoRef.current.removeAttribute('src'); // Destruimos el origen
+                    videoRef.current.load(); // Vaciamos la memoria RAM
+                }
+                // Si usamos react-native-video en móviles, pausamos el estado global
+                setStatus(prev => ({ ...prev, isPlaying: false }));
+            }
+        };
+    }, []);
 
     const [showControls, setShowControls] = useState(true);
     const [status, setStatus] = useState({ isPlaying: true, isBuffering: true, duration: 0, currentTime: 0 });
@@ -1231,18 +1508,26 @@ function VideoPlayerScreen({ route, navigation }) {
     const lastTapRef = useRef({ time: 0, side: null });
     const { PanResponder } = require('react-native');
 
-    // 🔥 NUEVO: ESCUCHADOR DE TECLADO / CONTROL DE TV 🔥
     useEffect(() => {
-        if (Platform.OS === 'web') {
-            const handleKeyDown = (e) => {
-                if (e.key === 'ArrowRight') { skip(10); setShowControls(true); }
-                else if (e.key === 'ArrowLeft') { skip(-10); setShowControls(true); }
-                else if (e.key === ' ' || e.key === 'Enter') { togglePlayPause(); }
-            };
+        const handleKeyDown = (e) => {
+            const key = e.key || '';
+            const code = e.keyCode || 0;
+
+            // 22 = Derecha, 21 = Izquierda, 23/66 = OK/Enter, 4 = Atrás
+            if (key === 'ArrowRight' || code === 22) { skip(10); setShowControls(true); }
+            else if (key === 'ArrowLeft' || code === 21) { skip(-10); setShowControls(true); }
+            else if (key === ' ' || key === 'Enter' || code === 23 || code === 66) {
+                togglePlayPause();
+                setShowControls(true);
+            }
+            else if (key === 'Escape' || code === 4) { navigation.goBack(); }
+        };
+
+        if (Platform.OS === 'web' || Platform.OS === 'android') {
             window.addEventListener('keydown', handleKeyDown);
             return () => window.removeEventListener('keydown', handleKeyDown);
         }
-    }, []);
+    }, [status]);
 
     const resetControlsTimer = () => {
         if (isLocked) return;
@@ -1368,26 +1653,44 @@ function VideoPlayerScreen({ route, navigation }) {
         }
     };
 
-    // 🔥 EVENTO: ¿QUÉ PASA CUANDO TERMINA EL VIDEO? 🔥
+    // 🔥 LA NUEVA LÓGICA DE AUTO-PLAY 🔥
     const handleVideoEnd = () => {
-        // 1. Lo borramos del "Sigue Viendo" (ya lo terminó)
-        const finalJellyfinId = movie?.jellyfin_id || (String(movie?.id).startsWith('jf_') ? String(movie.id).replace('jf_', '') : movie?.id);
-        removeFromContinueWatching(finalJellyfinId);
+        const finalId = movie?.jellyfin_id || movie?.id;
+        removeFromContinueWatching(finalId);
 
-        // 2. ¿Es una Película? Se acabó la función. Salimos al catálogo.
+        // Si es película, cerramos el reproductor normal
         if (movie.type === 'movie' && !movie.isAnime && !movie.isNovel) {
-            if (Platform.OS === 'android') ToastAndroid.show("Película terminada. ¡Esperamos que la hayas disfrutado!", ToastAndroid.SHORT);
+            if (Platform.OS === 'android') ToastAndroid.show("Película terminada.", ToastAndroid.SHORT);
             navigation.goBack();
             return;
         }
 
-        // 3. ¿Es un Episodio? ¡Magia de Autoplay!
-        if (movie.type === 'episode') {
-            console.log("Buscando siguiente capítulo...");
-            // Aquí iría la lógica para buscar el siguiente ID en tu lista de 'seasonsData'
-            // Por ahora, como es un MVP web, simplemente regresamos a la pantalla de la serie para que lo elija,
-            // pero en la versión final de TV/Móvil, inyectaremos el nuevo URL de Jellyfin directamente.
-            if (Platform.OS === 'android') ToastAndroid.show("Saltando al siguiente episodio...", ToastAndroid.SHORT);
+        // Si es episodio, buscamos el siguiente
+        if (movie.type === 'episode' && seriesData && seriesData.seasonsData) {
+            let nextEp = null;
+            let foundCurrent = false;
+
+            // Escaneamos las temporadas buscando el actual
+            for (const season of seriesData.seasonsData) {
+                for (const ep of season.episodes) {
+                    if (foundCurrent) {
+                        nextEp = ep;
+                        break;
+                    }
+                    if (ep.id === movie.id) foundCurrent = true;
+                }
+                if (nextEp) break;
+            }
+
+            if (nextEp) {
+                if (Platform.OS === 'android') ToastAndroid.show("Reproduciendo siguiente episodio...", ToastAndroid.SHORT);
+                // 🔥 AUTO-PLAY: Reemplazamos la pantalla actual con el nuevo episodio 🔥
+                navigation.replace('VideoPlayer', { movie: nextEp, seriesData: seriesData, selectedQuality });
+            } else {
+                if (Platform.OS === 'android') ToastAndroid.show("Has terminado la serie.", ToastAndroid.SHORT);
+                navigation.goBack();
+            }
+        } else {
             navigation.goBack();
         }
     };
@@ -1402,32 +1705,25 @@ function VideoPlayerScreen({ route, navigation }) {
     };
 
     useEffect(() => {
-        if (Platform.OS !== 'web') {
-            ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-            StatusBar.setHidden(true);
-        }
-        resetControlsTimer();
+        const handleKeyDown = (e) => {
+            const key = e.key || '';
+            const code = e.keyCode || 0;
 
-        (async () => {
-            if (Platform.OS !== 'web') {
-                const { status } = await Brightness.requestPermissionsAsync();
-                if (status === 'granted') {
-                    const currentBrightness = await Brightness.getBrightnessAsync();
-                    setBrightnessLevel(currentBrightness);
-                    initialBrightness.current = currentBrightness;
-                }
+            // Códigos para Android TV: 22(Der), 21(Izq), 23/66(OK), 4(Back)
+            if (key === 'ArrowRight' || code === 22) { skip(10); setShowControls(true); }
+            else if (key === 'ArrowLeft' || code === 21) { skip(-10); setShowControls(true); }
+            else if (key === ' ' || key === 'Enter' || code === 23 || code === 66) {
+                togglePlayPause();
+                setShowControls(true);
             }
-        })();
-
-        return () => {
-            if (Platform.OS !== 'web') {
-                ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-                StatusBar.setHidden(false);
-            }
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-            if (hideGestureTimer.current) clearTimeout(hideGestureTimer.current);
+            else if (key === 'Escape' || code === 4) { navigation.goBack(); }
         };
-    }, []);
+
+        if (Platform.OS === 'web' || Platform.OS === 'android') {
+            window.addEventListener('keydown', handleKeyDown);
+            return () => window.removeEventListener('keydown', handleKeyDown);
+        }
+    }, [status]);
 
     return (
         // 🔥 FIX SCROLLBAR: Forzamos 100vh en web para que la pantalla no se baje ni haya scroll
@@ -1588,10 +1884,53 @@ function VideoPlayerScreen({ route, navigation }) {
                         </View>
 
                         <View style={styles.bottomIconsRow}>
-                            <TouchableOpacity activeOpacity={0.6} onPress={togglePlayPause}><Ionicons name={status.isPlaying ? "pause" : "play"} size={32} color="#fff" /></TouchableOpacity>
-                            <TouchableOpacity activeOpacity={0.6} onPress={openAudioTracks}><Ionicons name="musical-note" size={26} color="#fff" /></TouchableOpacity>
-                            <TouchableOpacity activeOpacity={0.6} onPress={openSubTracks}><Ionicons name="chatbox-ellipses-outline" size={26} color="#fff" /></TouchableOpacity>
-                            <TouchableOpacity activeOpacity={0.6} onPress={toggleCrop}><Ionicons name="crop" size={26} color="#fff" /></TouchableOpacity>
+                            {/* Botón: Play / Pausa */}
+                            <Pressable
+                                focusable={true}
+                                onPress={togglePlayPause}
+                                style={({ focused }) => [
+                                    styles.playerControlBtn,
+                                    focused && styles.playerControlBtnFocused
+                                ]}
+                            >
+                                <Ionicons name={status.isPlaying ? "pause" : "play"} size={32} color="#fff" />
+                            </Pressable>
+
+                            {/* Botón: Idiomas de Audio */}
+                            <Pressable
+                                focusable={true}
+                                onPress={openAudioTracks}
+                                style={({ focused }) => [
+                                    styles.playerControlBtn,
+                                    focused && styles.playerControlBtnFocused
+                                ]}
+                            >
+                                <Ionicons name="musical-note" size={26} color="#fff" />
+                            </Pressable>
+
+                            {/* Botón: Subtítulos */}
+                            <Pressable
+                                focusable={true}
+                                onPress={openSubTracks}
+                                style={({ focused }) => [
+                                    styles.playerControlBtn,
+                                    focused && styles.playerControlBtnFocused
+                                ]}
+                            >
+                                <Ionicons name="chatbox-ellipses-outline" size={26} color="#fff" />
+                            </Pressable>
+
+                            {/* Botón: Ajuste de Pantalla (Crop) */}
+                            <Pressable
+                                focusable={true}
+                                onPress={toggleCrop}
+                                style={({ focused }) => [
+                                    styles.playerControlBtn,
+                                    focused && styles.playerControlBtnFocused
+                                ]}
+                            >
+                                <Ionicons name="crop" size={26} color="#fff" />
+                            </Pressable>
                         </View>
                     </LinearGradient>
                 </Animated.View>
@@ -1600,15 +1939,15 @@ function VideoPlayerScreen({ route, navigation }) {
     );
 }
 // ==========================================
-// 4. PANTALLAS (SCREENS)
+// 4. PANTALLAS (SCREENS) - HOME REDISEÑADO (NUVIO TV)
 // ==========================================
 function HomeScreen({ route, navigation }) {
     const {
-        user, setShowVipModal, // 🔥 Importamos el usuario y el interruptor del muro VIP
+        user, setShowVipModal,
         watchlist, toggleWatchlist, continueWatching,
         removeFromContinueWatching, jellyfinMovies,
-        isOfflineMode, completedDownloads,
-        isCasting, connectedTV, setItemToProcess, setModalActionType
+        isOfflineMode,
+        isCasting, connectedTV
     } = useContext(AppContext);
 
     const { width, height } = useWindowDimensions();
@@ -1624,8 +1963,9 @@ function HomeScreen({ route, navigation }) {
     const [itemToResume, setItemToResume] = useState(null);
     const [itemToProcessLocal, setItemToProcessLocal] = useState(null);
 
+    // 🔥 Este valor rastrea la posición exacta del scroll para los degradados
     const scrollY = useRef(new Animated.Value(0)).current;
-    const HERO_HEIGHT = isMobile ? height * 0.88 : height * 0.90;
+    const HERO_HEIGHT = isMobile ? height * 0.88 : height * 0.85;
 
     // 🔥 ESTADO DE TV: Guarda qué película está enfocada actualmente con el control remoto
     const [tvFocusedMovie, setTvFocusedMovie] = useState(null);
@@ -1671,42 +2011,44 @@ function HomeScreen({ route, navigation }) {
 
     const openMovieDetails = (movieData) => { navigation.navigate('MovieDetails', { movie: movieData }); };
 
-    // 🔥 HANDLE PLAY ACTUALIZADO
     const handlePlayPress = (movie) => {
-        if (user.vipDays <= 0 && !user.isVip) {
-            setShowVipModal(true);
-            return;
-        }
         const currentMovie = movie || activeHero;
 
-        if (isMobile) {
-            navigation.navigate('MovieDetails', { movie: currentMovie });
-            return;
-        }
-
-        if (isCasting) {
-            Alert.alert("VERTƎX Connect", `Mandando "${currentMovie.title}" a tu ${connectedTV}.`);
-            return;
-        }
-
-        const cwItem = continueWatching.find(m => m.id === currentMovie.id);
-
-        if (cwItem && cwItem.progress > 0.02) {
-            setItemToResume(cwItem);
-            setShowResumeModal(true);
-        } else if (currentMovie.qualities && currentMovie.qualities.length > 1) {
-            setItemToProcessLocal(currentMovie); // Guardamos la peli localmente sin crashear
-            setShowQuality(true);
-        } else {
-            navigation.navigate('VideoPlayer', { movie: currentMovie });
-        }
+        // 🔥 PASAMOS POR EL ESCUDO FREEMIUM PRIMERO 🔥
+        attemptPlay(currentMovie, () => {
+            if (isMobile) {
+                navigation.navigate('MovieDetails', { movie: currentMovie });
+                return;
+            }
+            if (isCasting) {
+                Alert.alert("VERTƎX Connect", `Mandando "${currentMovie.title}" a tu ${connectedTV}.`);
+                return;
+            }
+            const cwItem = continueWatching.find(m => m.id === currentMovie.id);
+            if (cwItem && cwItem.progress > 0.02) {
+                setItemToResume(cwItem);
+                setShowResumeModal(true);
+            } else if (currentMovie.qualities && currentMovie.qualities.length > 1) {
+                setItemToProcessLocal(currentMovie);
+                setShowQuality(true);
+            } else {
+                navigation.navigate('VideoPlayer', { movie: currentMovie });
+            }
+        });
     };
 
-    // Ahora el reproductor sabe exactamente qué película arrancar (evita que siempre abra el Hero)
+    // Ahora el reproductor sabe exactamente qué película arrancar
     const startPlayback = (quality) => {
         setShowQuality(false);
         navigation.navigate('VideoPlayer', { movie: itemToProcessLocal || activeHero, selectedQuality: quality });
     };
+
+    // 🔥 MAGIA DE ANIMACIÓN: Calculamos la opacidad del fondo basada en el scroll
+    const backgroundOpacity = scrollY.interpolate({
+        inputRange: [0, HERO_HEIGHT * 0.8],
+        outputRange: [1, 0],
+        extrapolate: 'clamp'
+    });
 
     return (
         <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -1736,67 +2078,66 @@ function HomeScreen({ route, navigation }) {
             {isMobile && <MobileHeader scrollY={scrollY} heroHeight={HERO_HEIGHT} />}
 
             {/* 📺 ========================================================
-                CAPA 1: EL FONDO FIJO Y DINÁMICO (SOLO TV - EFECTO NUVIO)
+                CAPA 1: EL FONDO FIJO Y DINÁMICO (AHORA RESPONDE AL SCROLL)
                ======================================================== */}
             {!isMobile && !selectedStudio && activeHero && (
-                <View style={[StyleSheet.absoluteFillObject, { zIndex: 0 }]}>
+                <Animated.View style={[StyleSheet.absoluteFillObject, { zIndex: 0, opacity: backgroundOpacity }]}>
                     <ExpoImage
                         key={`bg-${activeHero.id}`}
                         source={{ uri: activeHero.bgImage || activeHero.tmdbBg || activeHero.thumb }}
                         style={StyleSheet.absoluteFillObject}
                         contentFit="cover"
-                        transition={300} // Transición suave entre enfoques
+                        transition={300}
                     />
-                    {/* Degradados oscuros para asegurar legibilidad */}
-                    <LinearGradient colors={['#000000', 'transparent', 'rgba(0,0,0,0.9)', '#000000']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
-                    <LinearGradient colors={['#000000', 'rgba(0,0,0,0.8)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0 }} style={StyleSheet.absoluteFillObject} />
-
-                    <View style={{ position: 'absolute', top: '22%', left: 80, width: '50%' }}>
-                        <Text style={[styles.heroTitle, { fontSize: 50, color: '#fff', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 10, textTransform: 'uppercase', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed' }]} numberOfLines={2}>
-                            {activeHero.title}
-                        </Text>
-
-                        <View style={[styles.heroTags, { marginBottom: 15 }]}>
-                            <Text style={[styles.tagText, { fontSize: 16, fontWeight: 'bold', color: '#fff' }]}>{activeHero.year}</Text><Text style={styles.tagDot}> • </Text>
-                            <View style={[styles.tagBox, { borderColor: '#fff', borderWidth: 1, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: 'rgba(0,0,0,0.5)' }]}><Text style={[styles.tagText, { color: '#fff', fontSize: 14 }]}>{activeHero.rating || 'VIP'}</Text></View><Text style={styles.tagDot}> • </Text>
-                            <Text style={[styles.tagText, { fontSize: 16, fontWeight: 'bold', color: '#fff' }]}>{activeHero.lang || 'Latino'}</Text>
-                        </View>
-
-                        <Text style={{ fontSize: 16, lineHeight: 24, color: '#e0e0e0', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 6, marginBottom: 20 }} numberOfLines={4}>
-                            {activeHero.overview}
-                        </Text>
-
-                        <View style={{ flexDirection: 'row', gap: 15 }}>
-                            <TouchableOpacity style={[styles.btnPlayBigTV, { paddingHorizontal: 35, paddingVertical: 15, borderRadius: 8, backgroundColor: '#fff', margin: 0 }]} onPress={() => handlePlayPress(activeHero)}>
-                                <Ionicons name="play" size={22} color="#000" />
-                                <Text style={[styles.btnPlayBigText, { fontSize: 17, fontWeight: 'bold', color: '#000', marginLeft: 10 }]}>Reproducir</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.btnIconAction, { width: 55, height: 55, justifyContent: 'center', alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', margin: 0 }]} onPress={() => toggleWatchlist(activeHero)}>
-                                <Ionicons name={watchlist.some(m => m.id === activeHero.id) ? "checkmark" : "add"} size={30} color="#fff" />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
+                    {/* Degradados agresivos para asegurar legibilidad del texto */}
+                    <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)', '#000000']} start={{ x: 0, y: 0.3 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
+                    <LinearGradient colors={['#000000', 'rgba(0,0,0,0.6)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 0.5, y: 0 }} style={StyleSheet.absoluteFillObject} />
+                </Animated.View>
             )}
 
             {/* 📺 ========================================================
-                CAPA 2: LA CAJA RESTRINGIDA DE LISTAS (CORTE INVISIBLE)
+                CAPA 2: SCROLL COMPLETO (EFECTO NUVIO TV)
                ======================================================== */}
-            <View
-                style={isMobile
-                    ? { flex: 1, zIndex: 10 }
-                    : { position: 'absolute', bottom: 0, left: 0, right: 0, height: height * 0.38, zIndex: 10, overflow: 'hidden' } // 🔥 REDUCIDO A 38%
-                }
-            >
+            <View style={{ flex: 1, zIndex: 10 }}>
                 <Animated.ScrollView
                     ref={scrollViewRef}
                     style={{ flex: 1 }}
-                    // 🔥 PADDING TOP DE 40 PARA EMPUJAR LAS CARTAS HACIA ABAJO
-                    contentContainerStyle={{ paddingBottom: isMobile ? 100 : 60, paddingTop: isMobile ? 0 : 40 }}
+                    contentContainerStyle={{ paddingBottom: isMobile ? 100 : 80 }}
                     onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
                 >
+                    {/* INFO DEL HERO (TV) - AHORA SE MUEVE CON EL SCROLL */}
+                    {!isMobile && !selectedStudio && activeHero && (
+                        <View style={{ width: '100%', height: HERO_HEIGHT, justifyContent: 'center', paddingLeft: 80, paddingTop: 40 }}>
+                            <View style={{ width: '55%' }}>
+                                <Text style={[styles.heroTitle, { fontSize: 55, color: '#fff', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 10, textTransform: 'uppercase', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', marginBottom: 10 }]} numberOfLines={2}>
+                                    {activeHero.title}
+                                </Text>
+
+                                <View style={[styles.heroTags, { marginBottom: 20 }]}>
+                                    <Text style={[styles.tagText, { fontSize: 16, fontWeight: 'bold', color: '#fff' }]}>{activeHero.year}</Text><Text style={styles.tagDot}> • </Text>
+                                    <View style={[styles.tagBox, { borderColor: '#fff', borderWidth: 1, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: 'rgba(0,0,0,0.5)' }]}><Text style={[styles.tagText, { color: '#fff', fontSize: 14 }]}>{activeHero.rating || 'VIP'}</Text></View><Text style={styles.tagDot}> • </Text>
+                                    <Text style={[styles.tagText, { fontSize: 16, fontWeight: 'bold', color: '#fff' }]}>{activeHero.lang || 'Latino'}</Text>
+                                </View>
+
+                                <Text style={{ fontSize: 16, lineHeight: 26, color: '#e0e0e0', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 6, marginBottom: 30 }} numberOfLines={4}>
+                                    {activeHero.overview}
+                                </Text>
+
+                                <View style={[styles.detailsActionRow, { maxWidth: 450 }]}>
+                                    <TouchableOpacity style={[styles.btnPlayFlexible, { backgroundColor: '#fff', height: 50 }]} onPress={() => handlePlayPress(activeHero)}>
+                                        <Ionicons name="play" size={22} color="#000" />
+                                        <Text style={[styles.btnPlayGoldenText, { color: '#000' }]}>Reproducir</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.btnIconDark, { height: 50, width: 60 }]} onPress={() => toggleWatchlist(activeHero)}>
+                                        <Ionicons name={watchlist.some(m => m.id === activeHero.id) ? "checkmark" : "add"} size={26} color="#fff" />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
                     {/* Hero Móvil Clásico (Se renderiza SOLO si es móvil) */}
                     {isMobile && !selectedStudio && activeHero && (
                         <View style={{ width: width, height: HERO_HEIGHT, backgroundColor: '#000', overflow: 'hidden' }}>
@@ -1847,8 +2188,8 @@ function HomeScreen({ route, navigation }) {
                     )}
 
                     {/* 📚 FILAS DE CONTENIDO (MÓVIL Y TV) */}
-                    {/* 🔥 FIX: Padding adicional en TV para no tapar el título 🔥 */}
-                    <View style={{ marginTop: isMobile ? 25 : 60, zIndex: 10 }}>
+                    {/* En TV las listas ahora quedan montadas de forma natural sobre el fondo oscurecido */}
+                    <View style={{ marginTop: isMobile ? 25 : -80, zIndex: 10 }}>
                         {!selectedStudio && continueWatching.length > 0 && (
                             <ContinueWatchingList
                                 title="Sigue viendo"
@@ -1914,7 +2255,7 @@ function HomeScreen({ route, navigation }) {
         </View>
     );
 }
-// 🔥 PANTALLA DE BÚSQUEDA VIP (CON VOZ, CATEGORÍAS MÓVILES Y CEREBRO DE HISTORIAL LOCAL) 🔥
+// 🔥 MEGA-BUSCADOR: BÚSQUEDA DIRECTA EN EL SERVIDOR (64TB READY) 🔥
 function SearchScreen({ route, navigation }) {
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
@@ -1924,153 +2265,131 @@ function SearchScreen({ route, navigation }) {
     const [debouncedQuery, setDebouncedQuery] = useState(initialQuery || "");
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
-
-    // 🔥 HISTORIAL DE BÚSQUEDAS (LOCAL) 🔥
-    const [searchHistory, setSearchHistory] = useState([]);
-    const [isInputFocused, setIsInputFocused] = useState(false); // 👈 NUEVO: Sabe si tocaste la barra
+    const [isInputFocused, setIsInputFocused] = useState(false);
 
     const [isListening, setIsListening] = useState(false);
     const pulseAnim = useRef(new Animated.Value(1)).current;
 
     const { jellyfinMovies } = useContext(AppContext);
-    const displayData = jellyfinMovies && jellyfinMovies.length > 0 ? jellyfinMovies : FALLBACK_HERO;
-    const newMovies = displayData.slice(0, 10);
 
-    // 1. Cargar historial local al abrir la pantalla
-    useEffect(() => {
-        AsyncStorage.getItem('vertex_sh').then(res => { if (res) setSearchHistory(JSON.parse(res)); });
-    }, []);
-
-    // 2. Guardar en el historial
-    const saveSearchToHistory = (query) => {
-        if (!query || query.trim().length < 2) return;
-        const cleanQuery = query.trim().toLowerCase();
-        const newHistory = [cleanQuery, ...searchHistory.filter(q => q !== cleanQuery)].slice(0, 10);
-        setSearchHistory(newHistory);
-        AsyncStorage.setItem('vertex_sh', JSON.stringify(newHistory));
-    };
-
-    const deleteSearchItem = (query) => {
-        const newHistory = searchHistory.filter(q => q !== query);
-        setSearchHistory(newHistory);
-        AsyncStorage.setItem('vertex_sh', JSON.stringify(newHistory));
-    };
-
-    const clearAllSearchHistory = () => {
-        setSearchHistory([]);
-        AsyncStorage.removeItem('vertex_sh');
-    };
-
-    useEffect(() => {
-        // ESCUDO: Solo usar el micrófono en el celular
-        if (Platform.OS !== 'web' && Voice) {
-            Voice.onSpeechStart = () => setIsListening(true);
-            Voice.onSpeechEnd = () => setIsListening(false);
-            Voice.onSpeechError = () => setIsListening(false);
-            Voice.onSpeechResults = (e) => {
-                if (e.value && e.value.length > 0) {
-                    setSearchQuery(e.value[0]);
-                    setIsListening(false);
-                }
-            };
-            return () => {
-                if (Voice) Voice.destroy().then(Voice.removeAllListeners);
-            };
-        }
-    }, []);
-
-    useEffect(() => {
+    // 1. CEREBRO DE BÚSQUEDA REMOTA
+    const searchJellyfin = async (query) => {
+        if (query.length < 2) { setSearchResults([]); return; }
         setIsSearching(true);
+        try {
+            // Buscamos el ID del usuario de Jellyfin
+            const userRes = await fetch(`${JELLYFIN_URL}/Users?api_key=${JELLYFIN_API_KEY}`);
+            const users = await userRes.json();
+            const userId = users[0].Id;
+
+            // 🔥 LLAMADA MAESTRA: Buscamos en toda tu base de datos de 64TB 🔥
+            const url = `${JELLYFIN_URL}/Users/${userId}/Items?searchTerm=${encodeURIComponent(query)}&IncludeItemTypes=Movie,Series&Recursive=true&Fields=Overview,MediaSources,ImageTags&Limit=30&api_key=${JELLYFIN_API_KEY}`;
+
+            const response = await fetch(url);
+            const data = await response.json();
+
+            // Formateamos los resultados para que la App los entienda
+            const formattedResults = data.Items.map(item => {
+                const hasPrimary = item.ImageTags && item.ImageTags.Primary;
+                const hasBackdrop = item.BackdropImageTags && item.BackdropImageTags.length > 0;
+
+                const thumbUrl = hasPrimary ? `${JELLYFIN_URL}/Items/${item.Id}/Images/Primary?api_key=${JELLYFIN_API_KEY}&maxWidth=400` : null;
+                const bgUrl = hasBackdrop ? `${JELLYFIN_URL}/Items/${item.Id}/Images/Backdrop?api_key=${JELLYFIN_API_KEY}&maxWidth=1080` : thumbUrl;
+
+                return {
+                    id: item.Id,
+                    jellyfin_id: item.Id,
+                    title: item.Name,
+                    year: item.ProductionYear || 'N/A',
+                    overview: item.Overview || 'Sin sinopsis.',
+                    thumb: thumbUrl,
+                    bgImage: bgUrl, // 🔥 FIX: Añadimos la imagen de fondo para que la vista de detalles no quede negra
+                    type: item.Type?.toLowerCase() === 'series' ? 'series' : 'movie',
+                    imdb: item.CommunityRating ? item.CommunityRating.toFixed(1) : '5.0',
+                    genres: item.Genres?.join(' • ') || 'Premium',
+                    qualities: ['1080p (Original)'],
+                    videoCodec: 'H.264',
+                    director: 'Desconocido',
+                    studio: 'VERTƎX Server'
+                };
+            });
+
+            setSearchResults(formattedResults);
+        } catch (error) {
+            console.log("Error en búsqueda:", error);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    // 2. TEMPORIZADOR (DEBOUNCE): No satura el servidor mientras escribes
+    useEffect(() => {
         const timerId = setTimeout(() => {
-            setDebouncedQuery(searchQuery);
-            saveSearchToHistory(searchQuery);
-        }, 800);
+            if (searchQuery.length > 1) searchJellyfin(searchQuery);
+            else setSearchResults([]);
+        }, 600);
         return () => clearTimeout(timerId);
     }, [searchQuery]);
 
     useEffect(() => {
-        if (!debouncedQuery.trim()) { setSearchResults([]); setIsSearching(false); return; }
-        const query = debouncedQuery.toLowerCase().trim();
-        const filtrados = displayData.filter(m => m.title.toLowerCase().includes(query) || (m.genres && m.genres.toLowerCase().includes(query)));
-        setSearchResults(filtrados); setIsSearching(false);
-    }, [debouncedQuery, displayData]);
+        if (debouncedQuery.length > 1) {
+            searchJellyfin(debouncedQuery);
+        } else {
+            setSearchResults([]);
+        }
+    }, [debouncedQuery]);
 
     const handleVoiceSearch = async () => {
-        if (Platform.OS === 'web') {
-            alert("La búsqueda por voz solo está disponible en la App Móvil.");
-            return;
-        }
+        if (Platform.OS === 'web') return;
         if (isListening) { await Voice.stop(); setIsListening(false); }
         else { setSearchQuery(""); await Voice.start('es-ES'); }
     };
 
     return (
         <View style={{ flex: 1, backgroundColor: '#000' }}>
-            {/* keyboardShouldPersistTaps="handled" permite tocar los botones del historial sin que el teclado lo bloquee */}
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 100, paddingTop: isMobile ? 50 : 60 }} showsVerticalScrollIndicator={false}>
-
-                <View style={[styles.searchHeaderContainer, isMobile && { paddingLeft: 15, paddingRight: 15 }]}>
-                    <View style={[styles.searchBarWrapper, isInputFocused && { borderColor: PREMIUM_GOLD }]}>
-                        <Ionicons name="search" size={20} color="#888" style={{ marginLeft: 15 }} />
-                        <TextInput
-                            style={styles.searchInput}
-                            placeholder={isListening ? "Te estoy escuchando..." : "Buscar título o género..."}
-                            placeholderTextColor={isListening ? PREMIUM_GOLD : "#666"}
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            onFocus={() => setIsInputFocused(true)} // 👈 Registra que aplastaste la barra
-                            onBlur={() => setIsInputFocused(false)} // 👈 Registra que tocaste afuera
-                        />
-                        <TouchableOpacity onPress={handleVoiceSearch} style={{ paddingHorizontal: 15, borderLeftWidth: 1, borderLeftColor: '#333', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-                            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                                <Ionicons name={isListening ? "mic" : "mic-outline"} size={22} color={isListening ? "#ff4444" : PREMIUM_GOLD} />
-                            </Animated.View>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* 🔥 HISTORIAL DE BÚSQUEDA VISUAL (SOLO APARECE AL TOCAR LA BARRA) 🔥 */}
-                    {isInputFocused && searchQuery.length === 0 && searchHistory.length > 0 && (
-                        <View style={{ marginTop: 15 }}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                                <Text style={{ color: '#888', fontSize: 12, fontWeight: 'bold' }}>BÚSQUEDAS RECIENTES (LOCAL)</Text>
-                                <TouchableOpacity onPress={clearAllSearchHistory}><Text style={{ color: PREMIUM_GOLD, fontSize: 11, fontWeight: 'bold' }}>Borrar todo</Text></TouchableOpacity>
-                            </View>
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                                {searchHistory.map((histItem, idx) => (
-                                    <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 20, paddingLeft: 15, paddingRight: 5, paddingVertical: 6, borderWidth: 1, borderColor: '#333' }}>
-                                        <TouchableOpacity onPress={() => setSearchQuery(histItem)}><Text style={{ color: '#ccc', fontSize: 13 }}>{histItem}</Text></TouchableOpacity>
-                                        <TouchableOpacity style={{ marginLeft: 8, padding: 4 }} onPress={() => deleteSearchItem(histItem)}><Ionicons name="close-circle" size={16} color="#666" /></TouchableOpacity>
-                                    </View>
-                                ))}
-                            </View>
-                        </View>
-                    )}
+            {/* Header Fijo con Blur */}
+            <BlurView intensity={80} tint="dark" style={[styles.searchHeaderPinned, isMobile && { paddingTop: 50, paddingHorizontal: 15 }]}>
+                <View style={[styles.searchBarWrapper, isInputFocused && { borderColor: PREMIUM_GOLD, backgroundColor: '#111' }]}>
+                    <Ionicons name="search" size={20} color={isInputFocused ? PREMIUM_GOLD : "#888"} style={{ marginLeft: 15 }} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder={isListening ? "Escuchando..." : "Películas, series, actores..."}
+                        placeholderTextColor="#666"
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        onFocus={() => setIsInputFocused(true)}
+                        onBlur={() => setIsInputFocused(false)}
+                    />
+                    {isSearching && <ActivityIndicator color={PREMIUM_GOLD} style={{ marginRight: 10 }} />}
+                    <TouchableOpacity onPress={handleVoiceSearch} style={{ paddingHorizontal: 15, borderLeftWidth: 1, borderLeftColor: '#333' }}>
+                        <Ionicons name={isListening ? "mic" : "mic-outline"} size={22} color={isListening ? "#ff4444" : PREMIUM_GOLD} />
+                    </TouchableOpacity>
                 </View>
+            </BlurView>
 
-                {/* 🔥 BOTONES DE CATEGORÍAS (RESTABLECIDOS) Y NOVEDADES 🔥 */}
-                {searchQuery.length === 0 && !isInputFocused && (
-                    <View>
-                        {isMobile && <View style={{ paddingHorizontal: 10 }}><MobileCategoryButtons navigation={navigation} /></View>}
+            <ScrollView contentContainerStyle={{ paddingBottom: 100, paddingTop: isMobile ? 80 : 90 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-                        <View style={{ marginTop: 20, paddingHorizontal: isMobile ? 15 : 80 }}>
-                            <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'serif', marginBottom: 15 }}>Novedades y Estrenos</Text>
-                            <FilteredGridView movies={newMovies} onMoviePress={(movie) => navigation.navigate('MovieDetails', { movie })} isMobile={isMobile} />
-                        </View>
+                {searchQuery.length === 0 && (
+                    <View style={{ paddingHorizontal: isMobile ? 15 : 80, marginTop: 10 }}>
+                        <MobileCategoryButtons navigation={navigation} />
                     </View>
                 )}
 
-                {searchQuery.length > 0 && searchResults.length > 0 && !isSearching && (
-                    <View style={{ marginTop: 10, paddingHorizontal: isMobile ? 15 : 80 }}>
-                        <Text style={{ color: PREMIUM_GOLD, fontSize: 14, fontWeight: 'bold', marginBottom: 15 }}>RESULTADOS PARA "{debouncedQuery.toUpperCase()}"</Text>
-                        <FilteredGridView movies={searchResults} onMoviePress={(movie) => navigation.navigate('MovieDetails', { movie })} isMobile={isMobile} />
+                {searchResults.length > 0 && (
+                    <View style={{ paddingHorizontal: isMobile ? 15 : 80 }}>
+                        <Text style={{ color: PREMIUM_GOLD, fontSize: 13, fontWeight: 'bold', marginBottom: 15, letterSpacing: 1 }}>
+                            RESULTADOS DEL SERVIDOR
+                        </Text>
+                        <FilteredGridView movies={searchResults} onMoviePress={(m) => navigation.navigate('MovieDetails', { movie: m })} isMobile={isMobile} />
                     </View>
                 )}
 
-                {searchQuery.length > 0 && searchResults.length === 0 && !isSearching && (
-                    <View style={{ alignItems: 'center', marginTop: 80, paddingHorizontal: 30 }}>
-                        <Ionicons name="film-outline" size={60} color="#333" />
-                        <Text style={{ color: '#fff', fontSize: 18, textAlign: 'center', marginTop: 20, fontWeight: 'bold' }}>"{debouncedQuery}" no se encuentra en la bóveda</Text>
-                    </View>
+                {searchQuery.length > 2 && searchResults.length === 0 && !isSearching && (
+                    <EmptyState
+                        icon="search-outline"
+                        title="SIN COINCIDENCIAS"
+                        message={`No encontramos nada relacionado con "${searchQuery}" en el servidor.`}
+                    />
                 )}
             </ScrollView>
             {isMobile && <MobileBottomBar currentRoute="Buscar" />}
@@ -2106,48 +2425,45 @@ function MySpaceScreen({ navigation }) {
     return (
         <View style={{ flex: 1, backgroundColor: '#000' }}>
             {isMobile && <MobileHeader />}
+
             <ScrollView style={styles.mainScreen} contentContainerStyle={{ paddingBottom: isMobile ? 100 : 60, paddingTop: isMobile ? 20 : 50 }} showsVerticalScrollIndicator={false}>
 
                 <View style={[styles.mySpaceHeader, isMobile && { paddingLeft: 15, paddingRight: 15, marginBottom: 20 }]}>
                     <View>
-                        <Text style={[styles.mySpaceTitle, isMobile && { fontSize: 28 }]}>MI BÓVEDA</Text>
-                        <Text style={{ color: PREMIUM_GOLD, fontSize: 12, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 }}>ESPACIO PERSONAL</Text>
+                        <Text style={[styles.mySpaceTitle, isMobile && { fontSize: 32 }, { fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 1 }]}>MI BÓVEDA</Text>
+                        <Text style={{ color: PREMIUM_GOLD, fontSize: 12, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 }}>CENTRO PERSONAL</Text>
                     </View>
                 </View>
 
-                {continueWatching.length > 0 ? (
-                    <View>
+                {continueWatching.length > 0 && (
+                    <View style={{ marginTop: 10 }}>
                         <ContinueWatchingList
-                            title={`Sigue viendo (${continueWatching.length})`}
+                            title="Sigue viendo"
                             data={continueWatching}
                             onMoviePress={openMovieDetails}
                             isMobile={isMobile}
                             onRemoveItem={removeFromContinueWatching}
                             onViewAll={() => navigation.navigate('History')}
                         />
-                        <TouchableOpacity style={{ alignSelf: 'center', marginTop: 10, padding: 10, borderWidth: 1, borderColor: '#333', borderRadius: 8 }} onPress={clearWatchHistory}>
-                            <Text style={{ color: '#888', fontSize: 12, fontWeight: 'bold' }}><Ionicons name="trash-outline" size={14} /> BORRAR HISTORIAL LOCAL</Text>
+                        <TouchableOpacity style={{ alignSelf: 'center', marginTop: 5, paddingVertical: 8, paddingHorizontal: 15 }} onPress={clearWatchHistory}>
+                            <Text style={{ color: '#444', fontSize: 11, fontWeight: 'bold', letterSpacing: 1 }}>BORRAR HISTORIAL</Text>
                         </TouchableOpacity>
-                    </View>
-                ) : (
-                    <View style={[styles.emptyBox, { marginHorizontal: isMobile ? 15 : 80, backgroundColor: '#0a0a0a' }]}>
-                        <Ionicons name="play-circle-outline" size={40} color="#444" style={{ marginBottom: 10 }} />
-                        <Text style={styles.emptyText}>No tienes reproducciones pendientes.</Text>
                     </View>
                 )}
 
-                <View style={[styles.catalogWrapper, isMobile && { paddingLeft: 15, paddingRight: 15, marginTop: 30 }]}>
+                <View style={[styles.catalogWrapper, isMobile && { paddingLeft: 15, paddingRight: 15, marginTop: continueWatching.length > 0 ? 10 : 0 }]}>
                     <Text style={[styles.sectionTitle, { marginLeft: 0, marginBottom: 15 }]}>Mi Lista de Seguimiento</Text>
                     {watchlist.length > 0 ? (
                         <FilteredGridView movies={watchlist} onMoviePress={openMovieDetails} isMobile={isMobile} />
                     ) : (
-                        <View style={[styles.emptyBox, { backgroundColor: '#0a0a0a' }]}>
-                            <Ionicons name="bookmark-outline" size={40} color="#444" style={{ marginBottom: 10 }} />
-                            <Text style={styles.emptyText}>Tu lista está vacía</Text>
-                            <TouchableOpacity style={styles.btnExplore} onPress={() => navigation.navigate('Buscar')}>
-                                <Text style={styles.btnExploreText}>Explorar Bóveda</Text>
-                            </TouchableOpacity>
-                        </View>
+                        // 🔥 APLICAMOS EL ESTADO VACÍO ELEGANTE AQUÍ 🔥
+                        <EmptyState
+                            icon="bookmark"
+                            title="TU LISTA ESTÁ VACÍA"
+                            message="Aún no has guardado ninguna película o serie. Explora el catálogo y añade tus favoritas."
+                            buttonText="EXPLORAR CATÁLOGO"
+                            onAction={() => navigation.navigate('Buscar')}
+                        />
                     )}
                 </View>
             </ScrollView>
@@ -2156,7 +2472,6 @@ function MySpaceScreen({ navigation }) {
     );
 }
 function UserScreen({ navigation }) {
-    // 🔥 IMPORTANTE: Añadimos 'isLoggedIn' al contexto
     const { user, updateUserData, isLoggedIn, setIsLoggedIn } = useContext(AppContext);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
@@ -2168,14 +2483,19 @@ function UserScreen({ navigation }) {
     const [showEditProfile, setShowEditProfile] = useState(false);
     const [showBuffer, setShowBuffer] = useState(false);
 
+    // 🔥 NUEVOS ESTADOS: CENTRO DE RECOMPENSAS 🔥
+    const [showRewardsModal, setShowRewardsModal] = useState(false);
+    const [inviteCode, setInviteCode] = useState('');
+    const [isRedeeming, setIsRedeeming] = useState(false);
+
     // Estados de configuración
     const [batteryOpt, setBatteryOpt] = useState(false);
-    const [bufferSize, setBufferSize] = useState(15000); // 15 segundos por defecto
+    const [bufferSize, setBufferSize] = useState(15000);
     const [networkStatus, setNetworkStatus] = useState("ÓPTIMO");
 
     const [editName, setEditName] = useState(user.name);
     const [editPhoto, setEditPhoto] = useState(user.photo);
-    // NUESTRA CARPETA VIRTUAL DE AVATARES PREMIUM
+
     const AVATARES_LOCALES = [
         "https://ui-avatars.com/api/?name=V&background=c1915f&color=000&bold=true",
         "https://ui-avatars.com/api/?name=M&background=111&color=c1915f&bold=true",
@@ -2184,7 +2504,9 @@ function UserScreen({ navigation }) {
         "https://ui-avatars.com/api/?name=S&background=10b981&color=000&bold=true"
     ];
 
-    // 🔥 CERRAR SESIÓN ESTABLE Y SEGURO 🔥
+    // 🔥 GENERADOR VISUAL DEL CÓDIGO PROPIO (Ej: SURI-007) 🔥
+    const myReferralCode = user.name ? `${user.name.substring(0, 4).toUpperCase()}VIP-${user.id || '101'}` : 'CARGANDO...';
+
     const handleLogout = () => {
         Alert.alert("Cerrar Sesión", "¿Seguro que deseas salir de tu cuenta?", [
             { text: "Cancelar", style: "cancel" },
@@ -2192,20 +2514,16 @@ function UserScreen({ navigation }) {
                 text: "Cerrar Sesión",
                 style: "destructive",
                 onPress: async () => {
-                    await AsyncStorage.removeItem('vertex_access');
-                    await AsyncStorage.removeItem('vertex_refresh');
+                    await SecureStore.deleteItemAsync('vertex_access');
+                    await SecureStore.deleteItemAsync('vertex_refresh');
                     updateUserData({ name: "", vipDays: 0, isVip: false });
-
-                    // Al poner esto en false, la pantalla se cambia solita a la de "Login"
                     setIsLoggedIn(false);
-
-                    if (Platform.OS === 'android') {
-                        ToastAndroid.show("Sesión cerrada correctamente.", ToastAndroid.SHORT);
-                    }
+                    if (Platform.OS === 'android') ToastAndroid.show("Sesión cerrada correctamente.", ToastAndroid.SHORT);
                 }
             }
         ]);
     };
+
     const handleSaveProfile = () => {
         updateUserData({ name: editName, photo: editPhoto });
         setShowEditProfile(false);
@@ -2214,6 +2532,36 @@ function UserScreen({ navigation }) {
     const scanNetwork = async () => {
         setNetworkStatus("ESCANEANDO...");
         setTimeout(() => setNetworkStatus(Math.random() > 0.5 ? "ÓPTIMO" : "REGULAR"), 1500);
+    };
+
+    // 🔥 LÓGICA: CANJEAR CÓDIGO DE INVITACIÓN 🔥
+    const handleRedeemInvite = async () => {
+        if (inviteCode.trim().length < 4) { Alert.alert("Aviso", "El código ingresado es muy corto."); return; }
+        setIsRedeeming(true);
+        try {
+            // Extraemos la Huella del Dispositivo
+            let hwId = 'web-visitor';
+            if (Platform.OS === 'android') hwId = Application.androidId;
+            else if (Platform.OS === 'ios') hwId = await Application.getIosIdForVendorAsync();
+            else hwId = await AsyncStorage.getItem('vertex_web_id') || 'web-visitor';
+
+            const token = await AsyncStorage.getItem('vertex_access');
+            const response = await fetch(`${BACKEND_URL}/api/canjear-pin/`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ pin: inviteCode, device_id: hwId })
+            });
+            const data = await response.json();
+
+            if (response.ok && data.status === "success") {
+                Alert.alert("¡Código Canjeado!", data.message);
+                updateUserData({ vipDays: data.vip_days_left, isVip: true });
+                setInviteCode('');
+                setShowRewardsModal(false);
+            } else {
+                Alert.alert("Aviso", data.message || "El código es inválido o ya fue utilizado.");
+            }
+        } catch (e) { Alert.alert("Error", "Servidor no responde. Revisa tu conexión a internet."); }
+        finally { setIsRedeeming(false); }
     };
 
     const SettingRow = ({ icon, title, subtitle, subtitleColor = '#888', rightIcon = 'chevron-forward', onPress, isSwitch, switchValue, onSwitchChange }) => (
@@ -2233,137 +2581,86 @@ function UserScreen({ navigation }) {
         <View style={{ flex: 1, backgroundColor: '#050505' }}>
             {isMobile && <MobileHeader />}
 
-            {/* Modales Legales Globales */}
             <LegalModal visible={showLegal} onClose={() => setShowLegal(false)} />
             <PrivacyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
             <LicensesModal visible={showLicenses} onClose={() => setShowLicenses(false)} />
+            <Modal visible={showRewardsModal} transparent={true} animationType="fade">
+                {/* Modal de Recompensas */}
+            </Modal>
 
-            {/* 🔥 LÓGICA CONDICIONAL: ¿LOGUEADO O NO? 🔥 */}
-            {!isLoggedIn ? (
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 }}>
-                    <Ionicons name="person-circle-outline" size={100} color="#333" style={{ marginBottom: 20 }} />
-                    <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' }}>Crea tu Bóveda</Text>
-                    <Text style={{ color: '#888', fontSize: 14, textAlign: 'center', marginBottom: 40, lineHeight: 22 }}>Regístrate o inicia sesión para sincronizar tus películas, series y progreso en todos tus dispositivos.</Text>
+            <ScrollView style={styles.mainScreen} contentContainerStyle={{ paddingBottom: 120, paddingTop: 20 }} showsVerticalScrollIndicator={false}>
 
-                    <TouchableOpacity style={styles.authBtnPrimary} onPress={() => navigation.navigate('Auth')}>
-                        <Text style={styles.authBtnPrimaryText}>INICIAR SESIÓN O REGISTRARSE</Text>
-                    </TouchableOpacity>
+                {/* 1. CABECERA: Si está logueado ve su perfil, si no, botón Google */}
+                {isLoggedIn ? (
+                    <View style={styles.vipProfileHeader}>
+                        <TouchableOpacity style={styles.vipAvatarContainer} onPress={() => setShowEditProfile(true)}>
+                            <View style={styles.vipAvatarGlow}>
+                                <Image source={{ uri: user.photo || 'https://ui-avatars.com/api/?name=Ǝ&background=c1915f&color=000&bold=true' }} style={styles.vipAvatarImage} />
+                            </View>
+                            <View style={styles.vipBadgeContainer}><Text style={styles.vipBadgeText}>Socio VIP</Text></View>
+                        </TouchableOpacity>
+                        <Text style={styles.vipProfileName}>{user.name}</Text>
+                        <Text style={styles.vipProfileDays}>{user.vipDays} DÍAS VIP RESTANTES</Text>
+                    </View>
+                ) : (
+                    <View style={styles.authInvitationCard}>
+                        <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 5 }}>Bienvenido a VERTƎX</Text>
+                        <Text style={{ color: '#888', fontSize: 13, textAlign: 'center', marginBottom: 20 }}>Inicia sesión para guardar favoritos y sincronizar dispositivos.</Text>
+
+                        <TouchableOpacity style={styles.googleBtn} onPress={() => navigation.navigate('Auth')}>
+                            <Ionicons name="logo-google" size={20} color="#fff" />
+                            <Text style={styles.googleBtnText}>Continuar con Google</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={{ marginTop: 20 }} onPress={() => navigation.navigate('Auth')}>
+                            <Text style={{ color: PREMIUM_GOLD, fontSize: 13, fontWeight: 'bold' }}>O usa tu correo electrónico</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* 2. AJUSTES: Siempre visibles para todos */}
+                <View style={[styles.settingsContainer, !isMobile && { width: '60%', alignSelf: 'center' }]}>
+                    {isLoggedIn && (
+                        <TouchableOpacity style={styles.vipActionButton} onPress={() => setShowRewardsModal(true)}>
+                            <Ionicons name="gift" size={26} color={PREMIUM_GOLD} style={{ marginRight: 15 }} />
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: PREMIUM_GOLD, fontWeight: 'bold' }}>INVITA Y GANA DÍAS VIP</Text>
+                                <Text style={{ color: '#888', fontSize: 11 }}>Comparte tu código y obtén 3 días gratis.</Text>
+                            </View>
+                        </TouchableOpacity>
+                    )}
+
+                    <Text style={styles.vipSectionTitle}>GESTIÓN DE APLICACIÓN</Text>
+                    <View style={styles.vipSectionGroup}>
+                        <SettingRow icon="download-outline" title="Descargas" subtitle="Gestiona tu Bóveda offline" onPress={() => navigation.navigate('Downloads')} />
+                        <SettingRow icon="people-outline" title="Mi Cuenta" subtitle="Gestión de pantallas permitidas" onPress={() => navigation.navigate('LinkedAccounts')} />
+                    </View>
+
+                    <Text style={styles.vipSectionTitle}>REPRODUCCIÓN Y RENDIMIENTO</Text>
+                    <View style={styles.vipSectionGroup}>
+                        <SettingRow icon="speedometer-outline" title="Buffer (Precarga)" subtitle={`${bufferSize / 1000}s Configurado`} onPress={() => setShowBuffer(true)} />
+                        <SettingRow icon="wifi-outline" title="Escáner Wi-Fi" subtitle={networkStatus} onPress={scanNetwork} />
+                        <SettingRow icon="battery-charging-outline" title="Optimización de Batería" isSwitch={true} switchValue={batteryOpt} onSwitchChange={setBatteryOpt} />
+                    </View>
+
+                    <Text style={styles.vipSectionTitle}>ACERCA DE VERTƎX</Text>
+                    <View style={styles.vipSectionGroup}>
+                        <SettingRow icon="shield-checkmark-outline" title="Términos y DMCA" onPress={() => setShowLegal(true)} />
+                        <SettingRow icon="lock-closed-outline" title="Privacidad" onPress={() => setShowPrivacy(true)} />
+                    </View>
+
+                    {isLoggedIn && (
+                        <TouchableOpacity style={styles.vipLogoutBtn} onPress={handleLogout}>
+                            <Text style={styles.vipLogoutBtnText}>CERRAR SESIÓN</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
-            ) : (
-                /* 🔥 SI YA INICIÓ SESIÓN, MOSTRAMOS EL PERFIL NORMAL 🔥 */
-                <>
-                    {/* MODAL EDITAR PERFIL (SELECTOR CERRADO) */}
-                    <Modal visible={showEditProfile} transparent={true} animationType="fade">
-                        <View style={styles.modalOverlay}>
-                            <View style={[styles.modalContainer, { width: '90%', maxWidth: 400 }]}>
-                                <Text style={styles.modalTitle}>Editar Perfil</Text>
-
-                                <View style={[styles.searchBarWrapper, { marginBottom: 20 }]}>
-                                    <TextInput style={styles.searchInput} placeholder="Nombre de Usuario" value={editName} onChangeText={setEditName} placeholderTextColor="#666" />
-                                </View>
-
-                                <Text style={{ color: '#888', fontSize: 12, marginBottom: 10, alignSelf: 'flex-start' }}>SELECCIONA UN AVATAR</Text>
-
-                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 25 }}>
-                                    {AVATARES_LOCALES.map((avatar, index) => (
-                                        <TouchableOpacity
-                                            key={index}
-                                            onPress={() => setEditPhoto(avatar)}
-                                            style={{ borderWidth: editPhoto === avatar ? 3 : 0, borderColor: PREMIUM_GOLD, borderRadius: 10, overflow: 'hidden' }}
-                                        >
-                                            <Image source={{ uri: avatar }} style={{ width: 60, height: 60 }} />
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-
-                                <View style={styles.modalButtonsRow}>
-                                    <TouchableOpacity style={styles.modalBtnSecondary} onPress={() => setShowEditProfile(false)}><Text style={styles.modalBtnSecondaryText}>Cancelar</Text></TouchableOpacity>
-                                    <TouchableOpacity style={styles.modalBtnPrimary} onPress={handleSaveProfile}><Text style={styles.modalBtnPrimaryText}>Guardar</Text></TouchableOpacity>
-                                </View>
-                            </View>
-                        </View>
-                    </Modal>
-
-                    {/* MODAL BUFFER */}
-                    <Modal visible={showBuffer} transparent={true} animationType="fade">
-                        <View style={styles.modalOverlay}>
-                            <View style={styles.modalContainer}>
-                                <Ionicons name="speedometer" size={40} color={PREMIUM_GOLD} style={{ marginBottom: 10 }} />
-                                <Text style={styles.modalTitle}>Tamaño de Buffer</Text>
-                                <Text style={styles.modalText}>Precarga de video para conexiones lentas: {bufferSize / 1000} Segundos</Text>
-                                <Slider style={{ width: '100%', height: 40, marginBottom: 20 }} minimumValue={10000} maximumValue={60000} step={5000} value={bufferSize} onValueChange={setBufferSize} minimumTrackTintColor={PREMIUM_GOLD} maximumTrackTintColor="#333333" thumbTintColor="#fff" />
-                                <TouchableOpacity style={[styles.modalBtnPrimary, { width: '100%' }]} onPress={() => setShowBuffer(false)}><Text style={styles.modalBtnPrimaryText}>APLICAR</Text></TouchableOpacity>
-                            </View>
-                        </View>
-                    </Modal>
-
-                    {/* CONTENIDO DEL PERFIL SCROLLABLE */}
-                    <ScrollView style={styles.mainScreen} contentContainerStyle={{ paddingBottom: isMobile ? 120 : 60, paddingTop: isMobile ? 20 : 40 }} showsVerticalScrollIndicator={false}>
-
-                        {/* 🌟 CABECERA DE PERFIL VIP (AVATAR CUADRADO DINÁMICO TV/MÓVIL) */}
-                        <View style={styles.vipProfileHeader}>
-                            <TouchableOpacity style={styles.vipAvatarContainer} onPress={() => setShowEditProfile(true)}>
-                                <View style={styles.vipAvatarGlow}>
-                                    <Image source={{ uri: user.photo || 'https://ui-avatars.com/api/?name=Ǝ&background=c1915f&color=000&bold=true' }} style={[styles.vipAvatarImage, !isMobile && { width: 180, height: 180, borderRadius: 20 }]} />
-                                </View>
-                                <View style={[styles.vipBadgeContainer, !isMobile && { bottom: -15, paddingHorizontal: 20, paddingVertical: 8 }]}>
-                                    <Text style={[styles.vipBadgeText, !isMobile && { fontSize: 12 }]}>Socio VIP</Text>
-                                </View>
-                                <View style={{ position: 'absolute', top: 5, right: !isMobile ? 15 : -5, backgroundColor: 'rgba(0,0,0,0.7)', padding: 8, borderRadius: 10, borderWidth: 1, borderColor: PREMIUM_GOLD }}>
-                                    <Ionicons name="pencil" size={16} color={PREMIUM_GOLD} />
-                                </View>
-                            </TouchableOpacity>
-                            <Text style={[styles.vipProfileName, !isMobile && { fontSize: 36, marginTop: 25 }]}>{user.name || 'Suri Yamki'}</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5 }}>
-                                <Ionicons name="star" size={14} color={PREMIUM_GOLD} style={{ marginRight: 5 }} />
-                                <Text style={[styles.vipProfileDays, !isMobile && { fontSize: 14 }]}>{user.vipDays || 15} DÍAS VIP RESTANTES</Text>
-                            </View>
-                        </View>
-
-                        <View style={[styles.settingsContainer, !isMobile && { width: '60%', alignSelf: 'center' }]}>
-
-                            <Text style={styles.vipSectionTitle}>GESTIÓN DE APLICACIÓN</Text>
-                            <View style={styles.vipSectionGroup}>
-                                <SettingRow icon="download-outline" title="Descargas" subtitle="Gestiona tu Bóveda offline" onPress={() => navigation.navigate('Downloads')} />
-                                <SettingRow icon="people-outline" title="Mi Cuenta" subtitle="Gestión de pantallas permitidas" onPress={() => navigation.navigate('LinkedAccounts')} />
-                            </View>
-
-                            <Text style={styles.vipSectionTitle}>REPRODUCCIÓN Y RENDIMIENTO</Text>
-                            <View style={styles.vipSectionGroup}>
-                                <SettingRow icon="speedometer-outline" title="Buffer (Precarga)" subtitle={`${bufferSize / 1000}s Configurado`} rightIcon="settings-outline" onPress={() => setShowBuffer(true)} />
-                                <SettingRow icon="wifi-outline" title="Escáner Wi-Fi" subtitle={networkStatus} subtitleColor={networkStatus === 'ÓPTIMO' ? '#10b981' : PREMIUM_GOLD} rightIcon="refresh" onPress={scanNetwork} />
-                                <SettingRow icon="battery-charging-outline" title="Optimización de Batería" subtitle="Desactivar para descargas largas" isSwitch={true} switchValue={batteryOpt} onSwitchChange={(val) => { setBatteryOpt(val); if (val && Platform.OS !== 'web') Linking.openSettings(); }} />
-                            </View>
-
-                            <Text style={styles.vipSectionTitle}>ACERCA DE VERTƎX</Text>
-                            <View style={styles.vipSectionGroup}>
-                                <SettingRow icon="shield-checkmark-outline" title="Términos de Servicio y DMCA" subtitle="Blindaje legal detallado" rightIcon="open-outline" onPress={() => setShowLegal(true)} />
-                                <SettingRow icon="lock-closed-outline" title="Política de Privacidad" subtitle="Manejo de datos del usuario" rightIcon="open-outline" onPress={() => setShowPrivacy(true)} />
-                                <SettingRow icon="document-text-outline" title="Licencias Open Source" subtitle="Tecnología LibVLC y SDK" rightIcon="open-outline" onPress={() => setShowLicenses(true)} />
-
-                                <View style={[styles.vipSettingRow, { opacity: 0.6 }]}>
-                                    <View style={styles.vipSettingLeft}>
-                                        <View style={[styles.vipSettingIconBox, { backgroundColor: 'transparent' }]}><Ionicons name="information-circle-outline" size={22} color="#888" /></View>
-                                        <Text style={[styles.vipSettingTitle, { fontSize: 11, letterSpacing: 1 }]}>APP VERSION</Text>
-                                    </View>
-                                    <Text style={{ color: '#888', fontSize: 12, fontWeight: 'bold' }}>v4.12.8-gold</Text>
-                                </View>
-                            </View>
-
-                            <TouchableOpacity style={styles.vipLogoutBtn} onPress={handleLogout}>
-                                <Text style={styles.vipLogoutBtnText}>CERRAR SESIÓN</Text>
-                            </TouchableOpacity>
-
-                        </View>
-                    </ScrollView>
-                </>
-            )}
+            </ScrollView>
 
             {isMobile && <MobileBottomBar currentRoute="Usuario" />}
         </View>
     );
 }
-
 // 🔥 PANTALLA: GESTIÓN DE ACCESOS REAL 🔥
 function LinkedDevicesScreen({ navigation }) {
     const { width } = useWindowDimensions();
@@ -2661,15 +2958,12 @@ const SeasonAccordion = ({ season, seriesMovie, onSelectEpisode, onDownloadEpiso
 };
 
 // 🔥 PANTALLA PRINCIPAL DE DETALLES (DISEÑO PREMIUM VERTƎX) 🔥
-
-// 🔥 PANTALLA PRINCIPAL DE DETALLES (DISEÑO PREMIUM VERTƎX) 🔥
 function MovieDetailsScreen({ route, navigation }) {
     const { width, height } = useWindowDimensions();
     const isMobile = width < 768;
     const { movie } = route.params;
-
-    // 🔥 FIX DEL CRASH: Extraemos todas las variables necesarias del contexto
-    const { user, setShowVipModal, watchlist, toggleWatchlist, continueWatching, isCasting, connectedTV, setItemToProcess, setModalActionType } = useContext(AppContext);
+    // 🔥 FIX: Traemos attemptPlay para que no dé error
+    const { user, attemptPlay, setShowVipModal, watchlist, toggleWatchlist, continueWatching, isCasting, connectedTV, setItemToProcess, setModalActionType } = useContext(AppContext);
     const isFavorite = watchlist.some(m => m.id === movie.id);
 
     const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -2694,32 +2988,29 @@ function MovieDetailsScreen({ route, navigation }) {
     const [isLoadingEpisodes, setIsLoadingEpisodes] = useState(isSeries && seasons.length === 0);
     const [themeColor, setThemeColor] = useState(PREMIUM_GOLD);
 
-    // 🔥 ESTADOS DEL MODAL DE REANUDACIÓN 🔥
     const [showResumeModal, setShowResumeModal] = useState(false);
     const [resumeItemProgress, setResumeItemProgress] = useState(0);
+
+    // Altura calculada para el modo Inmersivo Móvil
+    const INMERSIVE_HEADER_HEIGHT = isMobile ? height * 0.40 : height * 0.55;
 
     useEffect(() => {
         const fetchColors = async () => {
             try {
                 const targetImage = movie.tmdbThumb || movie.thumb || movie.bgImage;
-                if (!targetImage || Platform.OS !== 'web') return; // En web lo activamos al 100%
+                if (!targetImage || Platform.OS !== 'web') return;
 
                 const result = await ImageColors.getColors(targetImage, {
                     fallback: PREMIUM_GOLD,
                     cache: true,
                     key: movie.id.toString()
                 });
-
-                // En la web, el resultado suele venir en 'vibrant' o 'dominant'
                 setThemeColor(result.dominant || result.vibrant || PREMIUM_GOLD);
-            } catch (e) {
-                setThemeColor(PREMIUM_GOLD);
-            }
+            } catch (e) { setThemeColor(PREMIUM_GOLD); }
         };
         fetchColors();
     }, [movie]);
 
-    // 🔥 FIX: Siempre intentar buscar las temporadas reales en el servidor si es una serie
     useEffect(() => {
         if (isSeries) {
             setIsLoadingEpisodes(true);
@@ -2732,7 +3023,6 @@ function MovieDetailsScreen({ route, navigation }) {
             const res = await fetch(`${JELLYFIN_URL}/Shows/${movie.jellyfin_id}/Episodes?Fields=Overview,MediaSources&api_key=${JELLYFIN_API_KEY}`);
             const data = await res.json();
 
-            // 🔥 Si la API de Jellyfin nos devuelve capítulos reales, reemplazamos la temporada "virtual"
             if (data.Items && data.Items.length > 0) {
                 const grouped = {};
                 data.Items.forEach(ep => {
@@ -2749,42 +3039,40 @@ function MovieDetailsScreen({ route, navigation }) {
                 setSeasons(Object.values(grouped));
             }
             setIsLoadingEpisodes(false);
-        } catch (error) {
-            console.log("Error obteniendo capítulos:", error);
-            setIsLoadingEpisodes(false);
-        }
+        } catch (error) { setIsLoadingEpisodes(false); }
     };
-    // 🔥 LÓGICA VIP: CONTINUAR VIENDO Y MEMORIA DE CALIDAD 🔥
+
     const handlePlayPress = () => {
-        if (user.vipDays <= 0 && !user.isVip) {
-            setShowVipModal(true);
-            return;
-        }
-        if (isCasting) { Alert.alert("VERTƎX Connect", `Mandando a tu ${connectedTV}.`); return; }
-
-        const cwItem = continueWatching.find(m => m.id === movie.id);
-
-        if (cwItem && cwItem.progress > 0.02) {
-            // Activa el modal visual en lugar de la alerta del sistema
-            setResumeItemProgress(cwItem.progress);
-            setShowResumeModal(true);
-        } else if (movie.qualities && movie.qualities.length > 1) {
-            setItemToProcessLocal(movie); setModalActionTypeLocal('play'); setShowQualityModal(true);
-        } else {
-            navigation.navigate('VideoPlayer', { movie });
-        }
+        attemptPlay(movie, () => {
+            if (isCasting) { Alert.alert("VERTƎX Connect", `Mandando a tu ${connectedTV}.`); return; }
+            const cwItem = continueWatching.find(m => m.id === movie.id);
+            if (cwItem && cwItem.progress > 0.02) {
+                setResumeItemProgress(cwItem.progress);
+                setShowResumeModal(true);
+            } else if (movie.qualities && movie.qualities.length > 1) {
+                setItemToProcessLocal(movie); setModalActionTypeLocal('play'); setShowQualityModal(true);
+            } else {
+                navigation.navigate('VideoPlayer', { movie });
+            }
+        });
     };
 
-    // 🔥 FUNCIONES DE DESCARGA PARA EPISODIOS 🔥
     const handleEpisodePlay = (episode) => {
-        // 🔥 ESCUDO VIP PARA SERIES
-        if (user.vipDays <= 0 && !user.isVip) {
-            setShowVipModal(true);
-            return;
-        }
+        attemptPlay(episode, () => {
+            if (isCasting) Alert.alert("VERTƎX Connect", `Mandando episodio a tu ${connectedTV}.`);
+            else {
+                setItemToProcessLocal(episode);
+                setModalActionTypeLocal('play');
+                setShowQualityModal(true);
+            }
+        });
+    };
 
-        if (isCasting) Alert.alert("VERTƎX Connect", `Mandando episodio a tu ${connectedTV}.`);
-        else { setItemToProcessLocal(episode); setModalActionTypeLocal('play'); setShowQualityModal(true); }
+    // Un poco más arriba, modifica la función startPlayback también:
+    const startPlayback = (quality) => {
+        setShowQuality(false);
+        // 🔥 MAGIA: Enviamos "movie" (toda la serie) como 'seriesData' para que el reproductor la lea
+        navigation.navigate('VideoPlayer', { movie: itemToProcessLocal || activeHero, seriesData: isSeries ? movie : null, selectedQuality: quality });
     };
     const handleEpisodeDownload = (episode) => { setItemToProcessLocal(episode); setModalActionTypeLocal('download'); setShowQualityModal(true); };
     const handleSeasonDownload = (season) => { Alert.alert("Próximamente", "La descarga por lotes estará activa en la próxima versión."); };
@@ -2793,25 +3081,13 @@ function MovieDetailsScreen({ route, navigation }) {
         <View style={[styles.mainScreen, { backgroundColor: '#050505' }]}>
             <QualitySelectorModal visible={showQualityModal} onClose={() => setShowQualityModal(false)} onSelect={(q) => { setShowQualityModal(false); navigation.navigate('VideoPlayer', { movie: itemToProcessLocal, selectedQuality: q }); }} actionType={modalActionTypeLocal} movie={itemToProcessLocal} />
 
-            {/* 🔥 MODAL DE REANUDACIÓN CON CAMBIO DE CALIDAD 🔥 */}
             <ResumeModal
                 visible={showResumeModal}
                 onClose={() => setShowResumeModal(false)}
                 progress={resumeItemProgress}
-                onResume={() => {
-                    setShowResumeModal(false);
-                    navigation.navigate('VideoPlayer', { movie: { ...movie, progress: resumeItemProgress } });
-                }}
-                onRestart={() => {
-                    setShowResumeModal(false);
-                    navigation.navigate('VideoPlayer', { movie: { ...movie, progress: 0 } });
-                }}
-                onChangeQuality={() => {
-                    setShowResumeModal(false);
-                    setItemToProcessLocal(movie);
-                    setModalActionTypeLocal('play');
-                    setShowQualityModal(true);
-                }}
+                onResume={() => { setShowResumeModal(false); navigation.navigate('VideoPlayer', { movie: { ...movie, progress: resumeItemProgress } }); }}
+                onRestart={() => { setShowResumeModal(false); navigation.navigate('VideoPlayer', { movie: { ...movie, progress: 0 } }); }}
+                onChangeQuality={() => { setShowResumeModal(false); setItemToProcessLocal(movie); setModalActionTypeLocal('play'); setShowQualityModal(true); }}
             />
 
             <View style={{ position: 'absolute', top: Platform.OS === 'ios' ? 50 : 30, left: 20, zIndex: 100 }}>
@@ -2819,77 +3095,112 @@ function MovieDetailsScreen({ route, navigation }) {
             </View>
 
             {isMobile ? (
-                // 🟢 MÓVIL: DISEÑO VERTICAL
-                <ScrollView contentContainerStyle={{ paddingBottom: 100 }} bounces={false} showsVerticalScrollIndicator={false}>
-                    <View style={{ width: '100%', height: height * 0.55 }}>
-                        <ExpoImage source={[movie.bgImage ? { uri: movie.bgImage } : null, { uri: movie.tmdbBg }].filter(Boolean)} style={StyleSheet.absoluteFillObject} contentFit="cover" transition={500} />
-                        <LinearGradient colors={['transparent', 'rgba(5,5,5,0.8)', '#050505']} style={StyleSheet.absoluteFillObject} />
-                    </View>
-                    <View style={{ paddingHorizontal: 25, marginTop: -60 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 25 }}>
-                            <ExpoImage source={[movie.thumb ? { uri: movie.thumb } : null, { uri: movie.tmdbThumb }].filter(Boolean)} style={styles.detailsMainPoster} contentFit="cover" onError={() => setPosterError(true)} />
-                            <View style={{ flex: 1, marginLeft: 15, justifyContent: 'flex-end' }}>
-                                <View style={styles.heroTopTags}>
-                                    <View style={styles.vipPremiumBadge}><Text style={styles.vipPremiumText}>VIP</Text></View>
-                                    <Text style={styles.genreSubtitleText} numberOfLines={1}>{movie.genres}</Text>
-                                </View>
-                                <Text style={styles.movieDetailsTitle} adjustsFontSizeToFit={true} numberOfLines={3} minimumFontScale={0.4}>{movie.title.toUpperCase()}</Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.techTagsRow}>
-                            <View style={styles.techTagBox}><Text style={styles.techTagText}>{movie.year}</Text></View>
-                            <View style={styles.techTagBox}><Text style={styles.techTagText}>{movie.rating}</Text></View>
-                            <View style={styles.techTagBox}><Text style={styles.techTagText}>{movie.lang}</Text></View>
-                            <View style={styles.starRatingBox}><Ionicons name="star" size={14} color={PREMIUM_GOLD} /><Text style={styles.starRatingText}>{movie.imdb}</Text></View>
-                        </View>
-
-                        <View style={styles.detailsActionRow}>
-                            <TouchableOpacity style={[styles.btnPlayFlexible, { backgroundColor: themeColor }]} onPress={handlePlayPress}><Ionicons name="play" size={22} color="#1a1005" /><Text style={styles.btnPlayGoldenText}>Mira ahora</Text></TouchableOpacity>
-                            <TouchableOpacity style={styles.btnIconDark} onPress={() => { if (isSeries) setShowSeriesModal(true); else { setItemToProcessLocal(movie); setModalActionTypeLocal('download'); setShowQualityModal(true); } }}><Ionicons name="download-outline" size={24} color="#fff" /></TouchableOpacity>
-                            <TouchableOpacity style={styles.btnIconDark} onPress={handleFavoritePress}><Animated.View style={{ transform: [{ scale: scaleAnim }] }}><Ionicons name={isFavorite ? "checkmark" : "add"} size={26} color={isFavorite ? PREMIUM_GOLD : "#fff"} /></Animated.View></TouchableOpacity>
-                        </View>
-
-                        <Text style={styles.sectionHeaderOrange}>SINOPSIS</Text>
-                        <Text style={styles.synopsisText}>{movie.overview}</Text>
-
-                        {isSeries && (
-                            <View style={{ marginTop: 30 }}>
-                                <Text style={[styles.sectionHeaderOrange, { marginBottom: 15 }]}>TEMPORADAS Y EPISODIOS</Text>
-                                {isLoadingEpisodes ? <ActivityIndicator size="large" color={PREMIUM_GOLD} style={{ marginTop: 20 }} /> : seasons.length > 0 ? (
-                                    <View style={{ gap: 10 }}>
-                                        {seasons.map((season, index) => (
-                                            <SeasonAccordion key={`season-${index}`} season={season} seriesMovie={movie} onSelectEpisode={handleEpisodePlay} onDownloadEpisode={handleEpisodeDownload} onDownloadSeason={handleSeasonDownload} />
-                                        ))}
-                                    </View>
-                                ) : (
-                                    <View style={{ padding: 20, alignItems: 'center' }}><Ionicons name="videocam-off-outline" size={40} color="#444" /><Text style={{ color: '#888', marginTop: 10, textAlign: 'center' }}>Sin episodios</Text></View>
-                                )}
-                            </View>
-                        )}
-                        <View style={styles.techSpecsContainer}>
-                            <Text style={styles.sectionHeaderOrange}>METADATOS DEL ARCHIVO</Text>
-                            <View style={styles.techSpecItem}><Text style={styles.techSpecLabel}>DIRECTOR Y ESTUDIO</Text><Text style={styles.techSpecValue}>{movie.director} • {movie.studio}</Text></View>
-                            <View style={styles.techSpecItem}>
-                                <Text style={styles.techSpecLabel}>MOTOR DE VIDEO</Text>
-                                <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
-                                    <View style={styles.qualityBadgeSmall}><Text style={styles.qualityBadgeTextSmall}>{movie.qualities[0] || '1080p'}</Text></View>
-                                    <View style={[styles.qualityBadgeSmall, { borderColor: PREMIUM_GOLD }]}><Text style={[styles.qualityBadgeTextSmall, { color: PREMIUM_GOLD }]}>{movie.videoCodec || 'H.264'}</Text></View>
-                                </View>
-                            </View>
-                        </View>
-                    </View>
-                </ScrollView>
-            ) : (
-                // 🟢 TV: NUEVO LAYOUT PANORÁMICO PREMIUM (LA IMAGEN F5633A.PNG DE REFERENCIA) 🟢
+                // 🟢 MÓVIL: DISEÑO INMERSIVO (SCROLL SOBRE IMAGEN)
                 <View style={{ flex: 1 }}>
-                    <View style={StyleSheet.absoluteFillObject}>
-                        <ExpoImage source={[movie.bgImage ? { uri: movie.bgImage } : null, { uri: movie.tmdbBg }].filter(Boolean)} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                        {/* 🔥 Degradado Horizontal para texto */}
-                        <LinearGradient colors={['#050505', '#050505', 'rgba(5,5,5,0.7)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 0.8, y: 0 }} style={StyleSheet.absoluteFillObject} />
+                    <View style={{ position: 'absolute', top: 0, width: '100%', height: INMERSIVE_HEADER_HEIGHT, zIndex: 0 }}>
+                        <ExpoImage source={[movie.bgImage ? { uri: movie.bgImage } : null, { uri: movie.tmdbBg }].filter(Boolean)} style={StyleSheet.absoluteFillObject} contentFit="cover" transition={500} />
+                        <LinearGradient colors={['transparent', 'rgba(5,5,5,0.6)', '#050505']} start={{ x: 0, y: 0.1 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
                     </View>
 
-                    <ScrollView contentContainerStyle={{ paddingBottom: 100, paddingTop: 100, paddingLeft: 80 }} showsVerticalScrollIndicator={false}>
+                    <ScrollView contentContainerStyle={{ paddingBottom: 100, paddingTop: INMERSIVE_HEADER_HEIGHT - 120 }} bounces={false} showsVerticalScrollIndicator={false} style={{ zIndex: 10 }}>
+                        <View style={{ paddingHorizontal: 25 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 25 }}>
+                                <ExpoImage source={[movie.thumb ? { uri: movie.thumb } : null, { uri: movie.tmdbThumb }].filter(Boolean)} style={[styles.detailsMainPoster, { elevation: 15, shadowColor: '#000', shadowOpacity: 0.8, shadowRadius: 10 }]} contentFit="cover" onError={() => setPosterError(true)} />
+                                <View style={{ flex: 1, marginLeft: 15, justifyContent: 'flex-end' }}>
+                                    <View style={styles.heroTopTags}>
+                                        <View style={styles.vipPremiumBadge}><Text style={styles.vipPremiumText}>VIP</Text></View>
+                                    </View>
+                                    <Text style={[styles.movieDetailsTitle, { height: 'auto', minHeight: 60, marginTop: 5 }]} adjustsFontSizeToFit={true} numberOfLines={3} minimumFontScale={0.5}>{movie.title.toUpperCase()}</Text>
+                                    <Text style={[styles.genreSubtitleText, { marginTop: 5, color: '#ccc' }]} numberOfLines={1}>{movie.genres}</Text>
+                                </View>
+                            </View>
+
+                            <View style={[styles.techTagsRow, { justifyContent: 'center' }]}>
+                                <View style={styles.techTagBox}><Text style={styles.techTagText}>{movie.year}</Text></View>
+                                <View style={styles.techTagBox}><Text style={styles.techTagText}>{movie.rating}</Text></View>
+                                <View style={styles.techTagBox}><Text style={styles.techTagText}>{movie.lang}</Text></View>
+                                <View style={[styles.starRatingBox, { backgroundColor: 'rgba(193, 145, 95, 0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }]}>
+                                    <Ionicons name="star" size={14} color={PREMIUM_GOLD} />
+                                    <Text style={[styles.starRatingText, { marginLeft: 4 }]}>{movie.imdb}</Text>
+                                </View>
+                            </View>
+
+                            {/* NUEVA JERARQUÍA DE BOTONES MÓVIL */}
+                            {/* NUEVA JERARQUÍA DE BOTONES MÓVIL */}
+                            <View style={{ marginBottom: 30 }}>
+                                {/* 🔥 FIX: Botón "Fat-Finger" Premium */}
+                                <TouchableOpacity style={[styles.btnPlayFlexible, { backgroundColor: themeColor, width: '100%', height: 65, borderRadius: 16, marginBottom: 15, shadowColor: themeColor, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 }]} onPress={handlePlayPress}>
+                                    <Ionicons name="play" size={28} color="#1a1005" />
+                                    <Text style={[styles.btnPlayGoldenText, { fontSize: 18, letterSpacing: 1.5 }]}>REPRODUCIR CONTENIDO</Text>
+                                </TouchableOpacity>
+                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20 }}>
+                                    <TouchableOpacity style={{ alignItems: 'center' }} onPress={() => { if (isSeries) setShowSeriesModal(true); else { setItemToProcessLocal(movie); setModalActionTypeLocal('download'); setShowQualityModal(true); } }}>
+                                        <View style={[styles.btnIconDark, { backgroundColor: 'transparent', borderWidth: 0 }]}><Ionicons name="download-outline" size={28} color="#e0e0e0" /></View>
+                                        <Text style={{ color: '#888', fontSize: 11, fontWeight: 'bold' }}>Bóveda</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={{ alignItems: 'center' }} onPress={handleFavoritePress}>
+                                        <Animated.View style={[{ transform: [{ scale: scaleAnim }] }, styles.btnIconDark, { backgroundColor: 'transparent', borderWidth: 0 }]}><Ionicons name={isFavorite ? "checkmark" : "add"} size={32} color={isFavorite ? PREMIUM_GOLD : "#e0e0e0"} /></Animated.View>
+                                        <Text style={{ color: '#888', fontSize: 11, fontWeight: 'bold' }}>Mi Lista</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            <Text style={styles.sectionHeaderOrange}>SINOPSIS</Text>
+                            <Text style={styles.synopsisText}>{movie.overview}</Text>
+
+                            {isSeries && (
+                                <View style={{ marginTop: 30 }}>
+                                    <Text style={[styles.sectionHeaderOrange, { marginBottom: 15 }]}>TEMPORADAS Y EPISODIOS</Text>
+                                    {isLoadingEpisodes ? <ActivityIndicator size="large" color={PREMIUM_GOLD} style={{ marginTop: 20 }} /> : seasons.length > 0 ? (
+                                        <View style={{ gap: 10 }}>
+                                            {seasons.map((season, index) => (
+                                                <SeasonAccordion key={`season-${index}`} season={season} seriesMovie={movie} onSelectEpisode={handleEpisodePlay} onDownloadEpisode={handleEpisodeDownload} onDownloadSeason={handleSeasonDownload} />
+                                            ))}
+                                        </View>
+                                    ) : (
+                                        <View style={{ padding: 20, alignItems: 'center', backgroundColor: '#111', borderRadius: 12 }}>
+                                            <Ionicons name="videocam-off-outline" size={40} color="#444" />
+                                            <Text style={{ color: '#888', marginTop: 10, textAlign: 'center' }}>Aún no hay episodios subidos</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
+                            <View style={styles.techSpecsContainer}>
+                                <Text style={styles.sectionHeaderOrange}>METADATOS DEL ARCHIVO</Text>
+                                <View style={styles.techSpecItem}><Text style={styles.techSpecLabel}>DIRECTOR Y ESTUDIO</Text><Text style={styles.techSpecValue}>{movie.director} • {movie.studio}</Text></View>
+                                <View style={styles.techSpecItem}>
+                                    <Text style={styles.techSpecLabel}>MOTOR DE VIDEO</Text>
+                                    <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
+                                        <View style={styles.qualityBadgeSmall}><Text style={styles.qualityBadgeTextSmall}>{movie?.qualities?.[0] || '1080p'}</Text></View>
+                                        <View style={[styles.qualityBadgeSmall, { borderColor: PREMIUM_GOLD }]}><Text style={[styles.qualityBadgeTextSmall, { color: PREMIUM_GOLD }]}>{movie.videoCodec || 'H.264'}</Text></View>
+                                    </View>
+                                </View>
+                            </View>
+                        </View>
+                    </ScrollView>
+                </View>
+            ) : (
+                // 🟢 TV: NUEVO LAYOUT PANORÁMICO PREMIUM
+                <View style={{ flex: 1, backgroundColor: '#050505' }}>
+                    <View style={{ position: 'absolute', top: 0, right: 0, width: '75%', height: '100%', zIndex: 0 }}>
+                        {/* La imagen ahora se pega a la derecha y ocupa toda la altura, sin estirarse mal */}
+                        <ExpoImage
+                            source={[movie.bgImage ? { uri: movie.bgImage } : null, { uri: movie.tmdbBg }].filter(Boolean)}
+                            style={{ width: '100%', height: '100%' }}
+                            contentFit="cover"
+                        />
+
+                        {/* Solo un gradiente lateral oscuro para leer el texto, sin cortar la imagen por abajo */}
+                        <LinearGradient
+                            colors={['#050505', 'rgba(5,5,5,0.9)', 'transparent']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 0.4, y: 0 }}
+                            style={StyleSheet.absoluteFillObject}
+                        />
+                    </View>
+
+                    {/* Quitamos paddingTop gigante porque la imagen ya no bloquea todo */}
+                    <ScrollView contentContainerStyle={{ paddingBottom: 100, paddingTop: 80, paddingLeft: 80 }} showsVerticalScrollIndicator={false}>
                         <View style={{ width: '55%' }}>
                             <View style={styles.heroTopTags}>
                                 <View style={styles.vipPremiumBadge}><Text style={styles.vipPremiumText}>VIP</Text></View>
@@ -3084,8 +3395,7 @@ function HistoryScreen({ navigation }) {
 // --- 5. NAVEGADORES (VERSIÓN TV PREMIUM MINIMALISTA Y TRANSPARENTE) ---
 function CustomDrawerContent(props) {
     const currentRoute = props.state?.routeNames[props.state.index];
-    // 🔥 MAGIA: Conectamos el cerebro para saber quién está usando la app
-    const { user } = useContext(AppContext);
+    const { user, attemptPlay, setShowVipModal, watchlist, toggleWatchlist } = useContext(AppContext);
 
     return (
         <View style={styles.drawerGlass}>
@@ -3100,6 +3410,7 @@ function CustomDrawerContent(props) {
 
                 <View style={{ width: '100%', gap: 10 }}>
                     <DrawerItem icon="home-variant" label="Inicio" focused={currentRoute === 'Inicio'} onPress={() => props.navigation.navigate('Inicio')} />
+                    <DrawerItem icon="television-play" label="TV en Vivo" focused={currentRoute === 'TV en Vivo'} onPress={() => props.navigation.navigate('TV en Vivo')} />
                     <DrawerItem icon="movie-play-outline" label="Películas" focused={currentRoute === 'Películas'} onPress={() => props.navigation.navigate('Películas')} />
                     <DrawerItem icon="television-classic" label="Series" focused={currentRoute === 'Serie'} onPress={() => props.navigation.navigate('Serie')} />
                     <DrawerItem icon="heart-outline" label="Novelas" focused={currentRoute === 'Novelas'} onPress={() => props.navigation.navigate('Novelas')} />
@@ -3113,17 +3424,35 @@ function CustomDrawerContent(props) {
     );
 }
 
-// 🟢 DrawerItem ahora es estático (sin Animated.Text)
-// 🟢 Iconos a tamaño 22 para que respire mejor el texto
-const DrawerItem = ({ icon, label, focused, onPress }) => (
-    <TouchableOpacity onPress={onPress} style={[styles.drawerItemPill, focused && styles.drawerItemActive]}>
-        <MaterialCommunityIcons name={icon} size={22} color={focused ? PREMIUM_GOLD : "#888"} />
-        <Text style={[styles.drawerItemLabel, { color: focused ? '#fff' : '#888' }]} numberOfLines={1}>
-            {label}
-        </Text>
-    </TouchableOpacity>
-);
+const DrawerItem = ({ icon, label, focused, onPress }) => {
+    const [isFocused, setIsFocused] = useState(false);
 
+    return (
+        <Pressable
+            onPress={onPress}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            focusable={true}
+            style={[
+                styles.drawerItemPill,
+                focused && styles.drawerItemActive,
+                isFocused && { backgroundColor: 'rgba(255,255,255,0.15)', transform: [{ scale: 1.05 }] }
+            ]}
+        >
+            <MaterialCommunityIcons
+                name={icon}
+                size={24}
+                color={focused || isFocused ? PREMIUM_GOLD : "#888"}
+            />
+            <Text style={[
+                styles.drawerItemLabel,
+                { color: focused || isFocused ? '#fff' : '#888', fontWeight: isFocused ? '900' : '600' }
+            ]}>
+                {label}
+            </Text>
+        </Pressable>
+    );
+};
 const MenuItem = ({ icon, label, focused, isExpanded, onPress, fadeAnim }) => (
     <TouchableOpacity onPress={onPress} style={styles.menuItemTouch}>
         <View style={[styles.iconWrapper, focused && styles.iconWrapperActive, isExpanded && focused && styles.iconWrapperActiveExpanded]}>
@@ -3137,8 +3466,6 @@ const MenuItem = ({ icon, label, focused, isExpanded, onPress, fadeAnim }) => (
     </TouchableOpacity>
 );
 
-// 🔥 PANTALLA DE DESCARGAS (CON BOTÓN DE REGRESO) 🔥
-// 🔥 PANTALLA DE DESCARGAS (NUEVO DISEÑO BENTO VIP) 🔥
 // 🔥 NUEVA PANTALLA DE DESCARGAS (CATEGORIZADA POR PESTAÑAS) 🔥
 function DownloadsScreen({ navigation }) {
     const { width } = useWindowDimensions();
@@ -3306,7 +3633,6 @@ function DownloadsScreen({ navigation }) {
     );
 }
 
-// 🔥 PANTALLA DE AUTENTICACIÓN REAL (CONECTADA A DJANGO JWT) 🔥
 function AuthScreen({ navigation }) {
     const { setIsLoggedIn, updateUserData } = useContext(AppContext);
     const { width } = useWindowDimensions();
@@ -3314,109 +3640,133 @@ function AuthScreen({ navigation }) {
 
     const [isLoginMode, setIsLoginMode] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
-
-    const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
-    const handleSubmit = async () => {
-        if (!email || !password || (!isLoginMode && !name)) {
-            Alert.alert("Error", "Por favor, completa todos los campos.");
-            return;
+    // 🔥 CONFIGURACIÓN DE GOOGLE (Pega aquí tu ID de la foto)
+    const [request, response, promptAsync] = Google.useAuthRequest({
+        webClientId: '375847819247-jllcfo7ab2asnl7849fgek61fdjdga81.apps.googleusercontent.com',
+    });
+
+    // Escuchador de la respuesta de Google
+    useEffect(() => {
+        if (response?.type === 'success') {
+            const { authentication } = response;
+            handleGoogleLogin(authentication.accessToken);
         }
+    }, [response]);
 
+    const handleGoogleLogin = async (token) => {
         setIsLoading(true);
-        const cleanEmail = email.toLowerCase().trim();
-
         try {
-            if (isLoginMode) {
-                // 1. LOGIN
-                const response = await fetch(`${BACKEND_URL}/api/login/`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: cleanEmail, password: password })
-                });
+            // 1. Le pedimos a Google los datos reales del usuario usando su llave
+            const response = await fetch('https://www.googleapis.com/userinfo/v2/me', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const googleUser = await response.json();
 
-                const data = await response.json();
+            // 2. Extraemos el correo y el nombre de la cuenta de Google
+            const { email, name, id } = googleUser;
 
-                if (response.ok) {
-                    // 2. PEDIMOS EL PERFIL PRIMERO (Para saber tu nombre)
-                    const profileRes = await fetch(`${BACKEND_URL}/api/perfil/`, {
-                        headers: { 'Authorization': `Bearer ${data.access}` }
-                    });
-                    const profileData = await profileRes.json();
-                    const finalName = profileData.username || cleanEmail.split('@')[0];
+            // 3. Creamos una "contraseña maestra" encriptada basada en su ID único de Google
+            // (Esto es un truco maestro si tu Django no tiene un endpoint especial para Google)
+            const secureGooglePassword = `GAuth_${id}_V3RT3X!`;
+            const safeUsername = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') + Math.floor(Math.random() * 100);
 
-                    // 3. EXTRAER ID LOCAL Y OCULTAR MARCA
-                    let hwId = 'web-visitor';
-                    if (Platform.OS === 'android') {
-                        hwId = Application.androidId;
-                    } else if (Platform.OS === 'ios') {
-                        hwId = await Application.getIosIdForVendorAsync();
-                    } else {
-                        // 🔥 SOLUCIÓN: Guardamos el ID del navegador para no generar uno nuevo en cada F5
-                        hwId = await AsyncStorage.getItem('vertex_web_id');
-                        if (!hwId) {
-                            hwId = 'browser-' + Math.random().toString(36).substr(2, 9);
-                            await AsyncStorage.setItem('vertex_web_id', hwId);
-                        }
-                    }
-                    // 4. REGISTRAR DISPOSITIVO (Usamos tu nombre, no la marca del celular)
-                    const deviceRes = await fetch(`${BACKEND_URL}/api/dispositivos/`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.access}` },
-                        body: JSON.stringify({
-                            device_id: hwId,
-                            device_name: finalName, // 🔥 PRIVACIDAD: Se guarda el nombre del usuario, no el equipo
-                            device_type: Platform.OS === 'web' ? 'Web' : (Device.deviceType === Device.DeviceType.TV ? 'TV' : 'Móvil')
-                        })
-                    });
+            // 4. Intentamos hacer Login normal en Django
+            const loginRes = await fetch(`${BACKEND_URL}/api/login/`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: email, password: secureGooglePassword })
+            });
 
-                    const deviceData = await deviceRes.json();
-
-                    if (deviceRes.status === 403 || deviceData.status === "limit_reached") {
-                        Alert.alert("Límite de Pantallas", "Esta cuenta ya tiene 5 dispositivos permitidos. Expulsa uno para entrar.");
-                        setIsLoading(false);
-                        return; // Lo bloquea en la puerta
-                    }
-
-                    // 5. ¡ÉXITO! GUARDAMOS LLAVES Y DEJAMOS ENTRAR
-                    await AsyncStorage.setItem('vertex_access', data.access);
-                    await AsyncStorage.setItem('vertex_refresh', data.refresh);
-
-                    updateUserData({
-                        id: profileData.id,
-                        name: finalName,
-                        email: profileData.email,
-                        vipDays: profileData.vip_days_left,
-                        isVip: profileData.is_vip
-                    });
-
-                    setIsLoggedIn(true);
-                    navigation.navigate('MainCatalog');
-                } else {
-                    Alert.alert("Error de Acceso", "Correo o contraseña incorrectos.");
-                }
+            if (loginRes.ok) {
+                // Ya estaba registrado con Google antes, entra directo (Auto-Login)
+                await executeLogin(email, secureGooglePassword);
             } else {
-                // REGISTRO
-                const response = await fetch(`${BACKEND_URL}/api/registro/`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: cleanEmail, email: cleanEmail, password: password })
+                // Es la primera vez que entra con Google, lo registramos automáticamente en Django
+                const regRes = await fetch(`${BACKEND_URL}/api/registro/`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: safeUsername, email: email, password: secureGooglePassword, first_name: name })
                 });
-                const data = await response.json();
-                if (response.ok || data.status === "success") {
-                    Alert.alert("¡Bienvenido a VERTƎX!", "Cuenta creada con éxito. Por favor, inicia sesión con tus datos.");
-                    setIsLoginMode(true);
+
+                const regData = await regRes.json();
+                if (regRes.ok || regData.status === "success") {
+                    await executeLogin(email, secureGooglePassword);
                 } else {
-                    Alert.alert("Error de Registro", "Este correo ya está en uso o la contraseña es muy débil.");
+                    Alert.alert("Error de Sincronización", "No pudimos crear tu cuenta en VERTƎX.");
                 }
             }
-        } catch (error) {
-            Alert.alert("Error de Red", "No se pudo conectar con el servidor VERTƎX.");
+        } catch (e) {
+            Alert.alert("Error de Conexión", "No pudimos comunicarnos con Google.");
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const executeLogin = async (loginEmail, loginPassword) => {
+        const response = await fetch(`${BACKEND_URL}/api/login/`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: loginEmail, password: loginPassword })
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+            const profileRes = await fetch(`${BACKEND_URL}/api/perfil/`, { headers: { 'Authorization': `Bearer ${data.access}` } });
+            const profileData = await profileRes.json();
+            const finalName = profileData.username || loginEmail.split('@')[0];
+
+            let hwId = 'web-visitor';
+            if (Platform.OS === 'android') hwId = Application.androidId;
+            else if (Platform.OS === 'ios') hwId = await Application.getIosIdForVendorAsync();
+            else {
+                hwId = await AsyncStorage.getItem('vertex_web_id') || ('browser-' + Math.random().toString(36).substr(2, 9));
+                await AsyncStorage.setItem('vertex_web_id', hwId);
+            }
+
+            await fetch(`${BACKEND_URL}/api/dispositivos/`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.access}` },
+                body: JSON.stringify({ device_id: hwId, device_name: finalName, device_type: Platform.OS === 'web' ? 'Web' : 'Móvil' })
+            });
+
+            // 🔒 Guardamos en la caja fuerte encriptada
+            await SecureStore.setItemAsync('vertex_access', data.access);
+            await SecureStore.setItemAsync('vertex_refresh', data.refresh);
+
+            updateUserData({ id: profileData.id, name: finalName, email: profileData.email, vipDays: profileData.vip_days_left, isVip: profileData.is_vip });
+            setIsLoggedIn(true);
+            navigation.navigate('MainCatalog');
+        } else {
+            Alert.alert("Error", "Correo o contraseña incorrectos.");
+        }
+    };
+
+    const handleSubmit = async () => {
+        const cleanEmail = email.toLowerCase().trim();
+        if (!cleanEmail || !password) return Alert.alert("Aviso", "Completa todos los campos.");
+        if (password.length < 6) return Alert.alert("Seguridad", "La contraseña debe tener al menos 6 caracteres.");
+
+        setIsLoading(true);
+        try {
+            if (isLoginMode) {
+                await executeLogin(cleanEmail, password);
+            } else {
+                // Registro (Usamos parte del correo como username seguro)
+                const safeUsername = cleanEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') + Math.floor(Math.random() * 1000);
+
+                const response = await fetch(`${BACKEND_URL}/api/registro/`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: safeUsername, email: cleanEmail, password: password })
+                });
+
+                const data = await response.json();
+                if (response.ok || data.status === "success") {
+                    await executeLogin(cleanEmail, password); // AUTO-LOGIN Netflix Style
+                } else {
+                    Alert.alert("Error de registro", "Es posible que el correo ya esté en uso.");
+                }
+            }
+        } catch (error) { Alert.alert("Error", "No hay conexión con el servidor."); }
+        finally { setIsLoading(false); }
     };
 
     return (
@@ -3434,40 +3784,40 @@ function AuthScreen({ navigation }) {
 
                 <Text style={styles.authLogo}>VERTƎX</Text>
                 <Text style={styles.authTitle}>{isLoginMode ? 'Iniciar Sesión' : 'Crear Cuenta'}</Text>
-                <Text style={styles.authSubtitle}>{isLoginMode ? 'Ingresa a tu bóveda personal.' : 'Únete a la nueva era del streaming premium.'}</Text>
+                <Text style={styles.authSubtitle}>Ingresa a tu bóveda personal y sincroniza tus dispositivos.</Text>
 
                 <View style={styles.authForm}>
-                    {!isLoginMode && (
-                        <View style={styles.authInputWrapper}>
-                            <Ionicons name="person-outline" size={20} color="#888" style={styles.authInputIcon} />
-                            <TextInput style={styles.authInput} placeholder="Tu Nombre (Ej: Suri)" placeholderTextColor="#666" value={name} onChangeText={setName} />
-                        </View>
-                    )}
-
                     <View style={styles.authInputWrapper}>
                         <Ionicons name="mail-outline" size={20} color="#888" style={styles.authInputIcon} />
-                        <TextInput style={styles.authInput} placeholder="Correo Electrónico" placeholderTextColor="#666" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
+                        <TextInput style={[styles.authInput, { outlineStyle: 'none' }]} placeholder="Correo Electrónico" placeholderTextColor="#666" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
                     </View>
 
                     <View style={styles.authInputWrapper}>
                         <Ionicons name="lock-closed-outline" size={20} color="#888" style={styles.authInputIcon} />
-                        <TextInput style={styles.authInput} placeholder="Contraseña" placeholderTextColor="#666" secureTextEntry value={password} onChangeText={setPassword} />
+                        <TextInput style={[styles.authInput, { outlineStyle: 'none' }]} placeholder="Contraseña" placeholderTextColor="#666" secureTextEntry value={password} onChangeText={setPassword} />
                     </View>
-
-                    {isLoginMode && (
-                        <TouchableOpacity style={{ alignSelf: 'flex-end', marginBottom: 20 }}>
-                            <Text style={{ color: PREMIUM_GOLD, fontSize: 12, fontWeight: 'bold' }}>¿Olvidaste tu contraseña?</Text>
-                        </TouchableOpacity>
-                    )}
 
                     <TouchableOpacity style={[styles.authBtnPrimary, isLoading && { opacity: 0.7 }]} onPress={handleSubmit} disabled={isLoading}>
                         {isLoading ? <ActivityIndicator color="#000" /> : <Text style={styles.authBtnPrimaryText}>{isLoginMode ? 'ENTRAR' : 'REGISTRARSE'}</Text>}
                     </TouchableOpacity>
+
+                    {/* 🔥 THE NEW GOOGLE BUTTON GOES HERE 🔥 */}
+                    <Text style={{ color: '#666', fontSize: 12, marginVertical: 15, textAlign: 'center', fontWeight: 'bold' }}>O INGRESA RÁPIDO CON</Text>
+
+                    <TouchableOpacity
+                        style={styles.googleBtn}
+                        disabled={!request}
+                        onPress={() => promptAsync()}
+                    >
+                        <Ionicons name="logo-google" size={20} color="#fff" />
+                        <Text style={styles.googleBtnText}>Continuar con Google</Text>
+                    </TouchableOpacity>
+
                 </View>
 
                 <View style={styles.authFooter}>
                     <Text style={styles.authFooterText}>{isLoginMode ? '¿No tienes una cuenta? ' : '¿Ya tienes una cuenta? '}</Text>
-                    <TouchableOpacity onPress={() => setIsLoginMode(!isLoginMode)}>
+                    <TouchableOpacity onPress={() => { setIsLoginMode(!isLoginMode); setPassword(''); }}>
                         <Text style={styles.authFooterLink}>{isLoginMode ? 'Regístrate' : 'Inicia Sesión'}</Text>
                     </TouchableOpacity>
                 </View>
@@ -3599,6 +3949,7 @@ function MainCatalog() {
         return (
             <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: '#000' } }}>
                 <Stack.Screen name="Inicio" component={HomeStackScreen} />
+                <Stack.Screen name="TV en Vivo" component={ReproductorTV} />
                 <Stack.Screen name="Buscar" component={SearchStackScreen} />
                 <Stack.Screen name="Mi Espacio" component={MySpaceStackScreen} />
                 <Stack.Screen name="Usuario" component={UserStackScreen} />
@@ -3620,6 +3971,7 @@ function MainCatalog() {
                 sceneContainerStyle: { backgroundColor: '#000000' }
             }}>
             <Drawer.Screen name="Inicio" component={HomeStackScreen} />
+            <Drawer.Screen name="TV en Vivo" component={ReproductorTV} />
             <Drawer.Screen name="Buscar" component={SearchStackScreen} />
             <Drawer.Screen name="Mi Espacio" component={MySpaceStackScreen} />
             <Drawer.Screen name="Usuario" component={UserStackScreen} />
@@ -3643,6 +3995,7 @@ function RootNavigator() {
             <RootStack.Navigator screenOptions={{ headerShown: false }}>
                 <RootStack.Screen name="MainCatalog" component={MainCatalog} />
                 <RootStack.Screen name="VideoPlayer" component={VideoPlayerScreen} options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
+                <RootStack.Screen name="ReproductorTV" component={ReproductorTV} options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
                 <RootStack.Screen name="MovieDetails" component={MovieDetailsScreen} options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
                 <RootStack.Screen name="History" component={HistoryScreen} options={{ animation: 'slide_from_right' }} />
                 <RootStack.Screen name="Downloads" component={DownloadsScreen} options={{ presentation: 'modal', animation: 'fade' }} />
@@ -3771,7 +4124,11 @@ const styles = StyleSheet.create({
 
     carouselContainer: { marginBottom: 25 },
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    flatListContent: { paddingLeft: 80, paddingRight: 20 },
+    flatListContent: {
+        paddingLeft: 80,
+        paddingRight: 20,
+        gap: 12
+    },
     posterCard: { width: 130, height: 195, borderRadius: 6, marginRight: 12, overflow: 'hidden', backgroundColor: '#111' },
     posterImage: { width: '100%', height: '100%' },
 
@@ -4170,5 +4527,26 @@ const styles = StyleSheet.create({
     authFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
     authFooterText: { color: '#888', fontSize: 13 },
     authFooterLink: { color: PREMIUM_GOLD, fontSize: 13, fontWeight: 'bold' },
+
+    // Estilo base del botón del reproductor
+    playerControlBtn: {
+        padding: 12,
+        borderRadius: 40,
+        backgroundColor: 'transparent',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    // Efecto visual cuando el control remoto de la TV está sobre el botón
+    playerControlBtnFocused: {
+        backgroundColor: 'rgba(193, 145, 95, 0.25)', // Aura dorada VERTƎX
+        transform: [{ scale: 1.2 }], // Crece un poco para dar feedback
+        borderWidth: 1,
+        borderColor: 'rgba(193, 145, 95, 0.5)',
+    },
+
+    // Estilos nuevos para Auth y Google
+    authInvitationCard: { backgroundColor: '#111', margin: 20, padding: 30, borderRadius: 20, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(193, 145, 95, 0.3)', borderStyle: 'dashed' },
+    googleBtn: { flexDirection: 'row', backgroundColor: '#4285F4', width: '100%', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 15 },
+    googleBtnText: { color: '#fff', fontWeight: 'bold', marginLeft: 10, fontSize: 15 },
 
 });
