@@ -1,7 +1,10 @@
 {
-  "name": "vertex-app",
+  "name": "app_frontend",
   "version": "1.0.0",
-  "main": "node_modules/expo/AppEntry.js",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",

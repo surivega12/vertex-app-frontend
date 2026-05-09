@@ -428,12 +428,19 @@ export const AppProvider = ({ children }) => {
     const fetchJellyfinData = async (isLoadMore = false) => {
         try {
             const token = await AsyncStorage.getItem('vertex_access');
-            const currentOffset = isLoadMore ? offset + 150 : 0;
+            const currentOffset = isLoadMore ? offset + 40 : 0;
 
             const response = await fetch(`${BACKEND_URL}/api/catalogo/?offset=${currentOffset}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const moviesData = await response.json();
+
+            // 🛡️ ESCUDO ANTI-CRASH: Si Django devuelve error o no hay 'Items', detenemos la ejecución silenciosamente
+            if (!response.ok || !moviesData || !moviesData.Items) {
+                console.log("Esperando autorización o el catálogo está vacío...");
+                setIsLoadingMore(false);
+                return;
+            }
 
             // 🔥 FIX: Usamos un placeholder más estable y con diseño acorde a VERTƎX
             const fallbackBg = "https://placehold.co/500x750/111111/c1915f/png?text=VERT%C6%8EX";
@@ -1299,7 +1306,7 @@ const VipLockModal = () => {
 
                     {!showPinBox ? (
                         <View style={{ width: '100%' }}>
-                            <TouchableOpacity style={[styles.authBtnPrimary, { height: 60, marginBottom: 15 }]} onPress={() => Linking.openURL("http://192.168.0.128:5500/checkout.html")}>
+                            <TouchableOpacity style={[styles.authBtnPrimary, { height: 60, marginBottom: 15 }]} onPress={() => Linking.openURL("https://vertex-vex.netlify.app/checkout.html")}>
                                 <Text style={[styles.authBtnPrimaryText, { fontSize: 16 }]}>DESBLOQUEAR ACCESO VIP</Text>
                             </TouchableOpacity>
 
@@ -2613,7 +2620,41 @@ function UserScreen({ navigation }) {
             <PrivacyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
             <LicensesModal visible={showLicenses} onClose={() => setShowLicenses(false)} />
             <Modal visible={showRewardsModal} transparent={true} animationType="fade">
-                {/* Modal de Recompensas */}
+                <View style={styles.qualityModalOverlay}>
+                    <View style={[styles.qualityModalBox, { padding: 25 }]}>
+                        <Ionicons name="gift" size={50} color={PREMIUM_GOLD} style={{ alignSelf: 'center', marginBottom: 10 }} />
+                        <Text style={styles.qualityModalTitle}>INVITA Y GANA</Text>
+                        <Text style={styles.qualityModalText}>
+                            Comparte tu código de socio con un amigo. Si él lo usa en esta misma pantalla, ¡ambos ganan 3 días VIP gratis!
+                        </Text>
+
+                        <View style={{ backgroundColor: '#111', padding: 15, borderRadius: 10, borderWidth: 1, borderColor: PREMIUM_GOLD, marginBottom: 20, alignItems: 'center' }}>
+                            <Text style={{ color: '#888', fontSize: 10, marginBottom: 5 }}>TU CÓDIGO ÚNICO</Text>
+                            <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold', letterSpacing: 2 }}>{myReferralCode}</Text>
+                        </View>
+
+                        <Text style={{ color: '#888', fontSize: 12, marginBottom: 10, textAlign: 'center' }}>¿Tienes el código de un amigo?</Text>
+                        <View style={[styles.authInputWrapper, { backgroundColor: '#111', height: 45, marginBottom: 15 }]}>
+                            <Ionicons name="keypad" size={18} color={PREMIUM_GOLD} style={styles.authInputIcon} />
+                            <TextInput
+                                style={[styles.authInput, { textTransform: 'uppercase', color: '#fff' }]}
+                                placeholder="Ingresa un código"
+                                placeholderTextColor="#666"
+                                value={inviteCode}
+                                onChangeText={setInviteCode}
+                                autoCapitalize="characters"
+                            />
+                        </View>
+
+                        <TouchableOpacity style={styles.qualityBtnPrimary} onPress={handleRedeemInvite} disabled={isRedeeming}>
+                            {isRedeeming ? <ActivityIndicator color="#000" /> : <Text style={styles.qualityBtnPrimaryText}>CANJEAR CÓDIGO</Text>}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={{ marginTop: 20 }} onPress={() => setShowRewardsModal(false)}>
+                            <Text style={{ color: PREMIUM_GOLD, fontSize: 14, fontWeight: 'bold', textAlign: 'center' }}>CERRAR</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
             </Modal>
 
             <ScrollView style={styles.mainScreen} contentContainerStyle={{ paddingBottom: 120, paddingTop: 20 }} showsVerticalScrollIndicator={false}>
@@ -2847,7 +2888,7 @@ function LinkedDevicesScreen({ navigation }) {
                         style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(193, 145, 95, 0.1)', paddingVertical: 14, paddingHorizontal: 40, borderRadius: 30, borderWidth: 1, borderColor: PREMIUM_GOLD }}
                         onPress={() => {
                             // Este es el enlace que sacará al usuario a tu web de pago
-                            const paymentUrl = "http://192.168.0.128:5500/checkout.html";
+                            const paymentUrl = "https://vertex-vex.netlify.app/checkout.html";
                             Linking.openURL(paymentUrl);
                         }}
                     >
