@@ -14,7 +14,6 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons, Ionicons, Octicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
-import ImageColors from 'react-native-image-colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store'; // 🔥 FIX: Bóveda de encriptación militar
 import * as SplashScreen from 'expo-splash-screen';
@@ -105,8 +104,6 @@ const INACTIVE_ICON = '#888888';
 // Llamamos a las variables de entorno de forma segura
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 const ADMIN_MASTER_KEY = process.env.EXPO_PUBLIC_ADMIN_MASTER_KEY;
-const JELLYFIN_URL = process.env.EXPO_PUBLIC_JELLYFIN_URL;
-const JELLYFIN_API_KEY = process.env.EXPO_PUBLIC_JELLYFIN_API_KEY;
 
 const FALLBACK_HERO = [
     { id: 'h1', title: "PEAKY BLINDERS\nTHE IMMORTAL MAN", year: "2026", rating: "R", lang: "Latino", genres: "Crimen • Drama", overview: "Después de que su hijo distanciado se vea envuelto en un complot nazi, el gánster autoexiliado Tommy Shelby debe regresar a Birmingham.", bgImage: "https://image.tmdb.org/t/p/original/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", thumb: "https://image.tmdb.org/t/p/w500/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", studio: "Netflix", imdb: "7.4", type: "movie" },
@@ -157,18 +154,19 @@ function ReproductorTV({ route, navigation }) {
     const params = route.params || {};
     const { stream_url, nombre } = params;
 
-    // 🔥 NUEVO: Estados para guardar los canales que vienen de Django
+    // 🔥 Detectamos si estamos en Celular o en TV/PC
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
+
     const [canalesLive, setCanalesLive] = useState([]);
     const [cargando, setCargando] = useState(true);
 
-    // 🔥 NUEVO: Función que va a buscar a tu servidor Django
     useEffect(() => {
-        // Solo buscamos si estamos en la pantalla de la parrilla
         if (!stream_url) {
             const cargarCanales = async () => {
                 try {
-                    // Llama a la ruta que creamos en tu backend
-                    const response = await fetch(`${BACKEND_URL}/api/canales_tv/`);
+                    // 🔥 FIX 1: Se añadió la barra "/" al final. Obligatorio para Django.
+                    const response = await fetch(`${BACKEND_URL}/api/canales_tv`);
                     if (response.ok) {
                         const data = await response.json();
                         setCanalesLive(data);
@@ -186,70 +184,78 @@ function ReproductorTV({ route, navigation }) {
     // 🛑 SI NO HAY CANAL SELECCIONADO -> MOSTRAR LA PARRILLA
     if (!stream_url) {
         return (
-            <View style={{ flex: 1, backgroundColor: '#050505', paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 20 }}>
+            <View style={{ flex: 1, backgroundColor: '#050505', paddingTop: isMobile ? (Platform.OS === 'ios' ? 60 : 40) : 40, paddingHorizontal: 20 }}>
 
-                {/* 🔥 AQUÍ ESTÁ EL NUEVO BOTÓN DE REGRESO PARA LA PARRILLA 🔥 */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, marginRight: 15 }}>
-                        <Ionicons name="arrow-back" size={24} color="#ffffff" />
-                    </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingLeft: isMobile ? 0 : 50 }}>
+                    {isMobile && (
+                        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, marginRight: 15 }}>
+                            <Ionicons name="arrow-back" size={24} color="#ffffff" />
+                        </TouchableOpacity>
+                    )}
                     <Text style={{ color: '#c1915f', fontSize: 26, fontWeight: 'bold', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 1 }}>
                         TELEVISIÓN EN VIVO
                     </Text>
                 </View>
 
-                {cargando ? (
-                    <ActivityIndicator size="large" color="#c1915f" style={{ marginTop: 50 }} />
-                ) : canalesLive.length === 0 ? (
-                    <Text style={{ color: '#888', textAlign: 'center', marginTop: 50 }}>No hay canales disponibles en este momento.</Text>
-                ) : (
-                    <FlatList
-                        data={canalesLive}
-                        keyExtractor={item => item.id.toString()}
-                        numColumns={2}
-                        columnWrapperStyle={{ justifyContent: 'space-between' }}
-                        renderItem={({ item }) => (
-                            <TouchableOpacity
-                                style={{ width: '48%', backgroundColor: '#111', borderRadius: 12, padding: 20, alignItems: 'center', marginBottom: 15, borderWidth: 1, borderColor: 'rgba(193, 145, 95, 0.3)' }}
-                                onPress={() => {
-                                    if (item.stream_url) {
-                                        navigation.navigate('TV en Vivo', { stream_url: item.stream_url, nombre: item.nombre });
-                                    } else {
-                                        Alert.alert("Aviso", "Canal fuera del aire temporalmente.");
-                                    }
-                                }}
-                            >
-                                <Image source={{ uri: item.logo || 'https://placehold.co/100x100/111/c1915f/png?text=TV' }} style={{ width: 70, height: 70, resizeMode: 'contain', marginBottom: 15 }} />
-                                <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center', fontSize: 13 }}>{item.nombre}</Text>
-                            </TouchableOpacity>
-                        )}
-                    />
-                )}
+                <View style={{ flex: 1, paddingLeft: isMobile ? 0 : 50 }}>
+                    {cargando ? (
+                        <ActivityIndicator size="large" color="#c1915f" style={{ marginTop: 50 }} />
+                    ) : canalesLive.length === 0 ? (
+                        <Text style={{ color: '#888', textAlign: 'center', marginTop: 50 }}>No hay canales disponibles en este momento.</Text>
+                    ) : (
+                        <FlatList
+                            data={canalesLive}
+                            keyExtractor={item => item.id.toString()}
+                            numColumns={isMobile ? 2 : 4}
+                            columnWrapperStyle={{ justifyContent: 'flex-start', gap: 15 }}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={{ width: isMobile ? '48%' : 200, backgroundColor: '#111', borderRadius: 12, padding: 20, alignItems: 'center', marginBottom: 15, borderWidth: 1, borderColor: 'rgba(193, 145, 95, 0.3)' }}
+                                    onPress={() => {
+                                        if (item.stream_url) {
+                                            navigation.navigate('TV en Vivo', { stream_url: item.stream_url, nombre: item.nombre });
+                                        } else {
+                                            Alert.alert("Aviso", "Canal fuera del aire temporalmente.");
+                                        }
+                                    }}
+                                >
+                                    <Image source={{ uri: item.logo || 'https://placehold.co/100x100/111/c1915f/png?text=TV' }} style={{ width: 70, height: 70, resizeMode: 'contain', marginBottom: 15 }} />
+                                    <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center', fontSize: 13 }}>{item.nombre}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    )}
+                </View>
             </View>
         );
     }
 
-    // 🟢 SI YA SELECCIONÓ UN CANAL -> MOSTRAR EL REPRODUCTOR DE VIDEO
+    // 🟢 SI YA SELECCIONÓ UN CANAL -> MOSTRAR EL REPRODUCTOR DE VIDEO A PANTALLA COMPLETA
     return (
         <View style={{ flex: 1, backgroundColor: '#000' }}>
             <View style={{ position: 'absolute', top: Platform.OS === 'ios' ? 50 : 30, left: 20, zIndex: 100 }}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 }}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }}>
                     <Ionicons name="arrow-back" size={24} color="#ffffff" />
                 </TouchableOpacity>
             </View>
 
-            <Text style={{ color: '#D4AF37', fontSize: 18, textAlign: 'center', marginTop: Platform.OS === 'ios' ? 60 : 40, fontWeight: 'bold', letterSpacing: 1 }}>
-                {nombre.toUpperCase()}
-            </Text>
-
             <View style={{ flex: 1, justifyContent: 'center' }}>
-                <ExpoVideo
-                    source={{ uri: stream_url }}
-                    useNativeControls
-                    resizeMode="contain"
-                    shouldPlay
-                    style={{ width: '100%', height: '85%' }}
-                />
+                {Platform.OS === 'web' ? (
+                    <video
+                        src={stream_url}
+                        style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' }}
+                        controls
+                        autoPlay
+                    />
+                ) : (
+                    <ExpoVideo
+                        source={{ uri: stream_url }}
+                        useNativeControls
+                        resizeMode="contain"
+                        shouldPlay
+                        style={{ width: '100%', height: '100%' }}
+                    />
+                )}
             </View>
         </View>
     );
@@ -308,7 +314,9 @@ export const AppProvider = ({ children }) => {
 
                 // 🔥 MAGIA DE SEGURIDAD: VERIFICAMOS SI YA HABÍA INICIADO SESIÓN ANTES 🔥
                 if (hasInternet) {
-                    const savedToken = await SecureStore.getItemAsync('vertex_access'); // 🔒 Leemos de la caja fuerte
+                    const savedToken = Platform.OS === 'web'
+                        ? await AsyncStorage.getItem('vertex_access')
+                        : await SecureStore.getItemAsync('vertex_access');
                     if (savedToken) {
                         try {
                             const profileRes = await fetch(`${BACKEND_URL}/api/perfil/`, {
@@ -327,8 +335,18 @@ export const AppProvider = ({ children }) => {
                                 setIsLoggedIn(true); // Token válido: ¡Pasa directo sin pedir clave!
                             } else {
                                 // El token expiró o es inválido, limpiamos y lo mandamos a login
-                                await SecureStore.deleteItemAsync('vertex_access');
-                                await SecureStore.deleteItemAsync('vertex_refresh');
+                                if (Platform.OS === 'web') {
+                                    await AsyncStorage.removeItem('vertex_access');
+                                    await AsyncStorage.removeItem('vertex_refresh');
+                                } else {
+                                    if (Platform.OS === 'web') {
+                                        await AsyncStorage.removeItem('vertex_access');
+                                        await AsyncStorage.removeItem('vertex_refresh');
+                                    } else {
+                                        await SecureStore.deleteItemAsync('vertex_access');
+                                        await SecureStore.deleteItemAsync('vertex_refresh');
+                                    }
+                                }
                                 setIsLoggedIn(false);
                             }
                         } catch (e) {
@@ -409,19 +427,13 @@ export const AppProvider = ({ children }) => {
     // 2. EXTRACCIÓN AVANZADA DE DATOS (JELLYFIN PREMIUM)
     const fetchJellyfinData = async (isLoadMore = false) => {
         try {
-            const authHeader = { 'Authorization': 'Basic eWFta2kwNzo3dmx5NlhxWlRuRUtCMXBQ', 'Accept': 'application/json' };
-            const userRes = await fetch(`${JELLYFIN_URL}/Users?api_key=${JELLYFIN_API_KEY}`, { headers: authHeader });
-            const users = await userRes.json();
-            if (!users || users.length === 0) throw new Error("No se encontraron usuarios.");
-            const userId = users[0].Id;
-
+            const token = await AsyncStorage.getItem('vertex_access');
             const currentOffset = isLoadMore ? offset + 150 : 0;
 
-            // 🔥 FIX 1 CORREGIDO: Quitamos 'Episode' para que el catálogo no se inunde de capítulos sueltos
-            const url = `${JELLYFIN_URL}/Users/${userId}/Items?IncludeItemTypes=Movie,Series&Recursive=true&Limit=150&StartIndex=${currentOffset}&Fields=Overview,Studios,People,MediaSources,Tags,Genres,Path,ImageTags,ProviderIds&SortBy=DateCreated&SortOrder=Descending&api_key=${JELLYFIN_API_KEY}`;
-
-            const moviesRes = await fetch(url, { headers: authHeader });
-            const moviesData = await moviesRes.json();
+            const response = await fetch(`${BACKEND_URL}/api/catalogo/?offset=${currentOffset}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const moviesData = await response.json();
 
             // 🔥 FIX: Usamos un placeholder más estable y con diseño acorde a VERTƎX
             const fallbackBg = "https://placehold.co/500x750/111111/c1915f/png?text=VERT%C6%8EX";
@@ -432,11 +444,9 @@ export const AppProvider = ({ children }) => {
                 const hasPrimary = item.ImageTags && item.ImageTags.Primary;
                 const hasBackdrop = item.BackdropImageTags && item.BackdropImageTags.length > 0;
 
-                // Le pedimos a Jellyfin que nos envíe el póster comprimido a 300px de ancho (pesará unos 30kb en vez de 3MB)
-                const jellyfinPrimary = hasPrimary ? `${JELLYFIN_URL}/Items/${item.Id}/Images/Primary?api_key=${JELLYFIN_API_KEY}&maxWidth=300&quality=85` : null;
-
-                // El fondo (Backdrop) lo pedimos a 1080px máximo para que se vea nítido en el Hero, pero sin llegar al peso 4K
-                const jellyfinBackdrop = hasBackdrop ? `${JELLYFIN_URL}/Items/${item.Id}/Images/Backdrop?api_key=${JELLYFIN_API_KEY}&maxWidth=1080&quality=85` : null;
+                // Ahora las imágenes pasan por nuestro Proxy en Django
+                const jellyfinPrimary = hasPrimary ? `${BACKEND_URL}/api/imagen/${item.Id}/Primary/` : null;
+                const jellyfinBackdrop = hasBackdrop ? `${BACKEND_URL}/api/imagen/${item.Id}/Backdrop/` : null;
 
                 // 2. PREPARAMOS EL ESCUDO ANTI-404 (THE MOVIE DB)
                 const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TmdbMovie || item.ProviderIds?.TmdbSeries || item.ProviderIds?.TmdbEpisode;
@@ -649,7 +659,7 @@ export const AppProvider = ({ children }) => {
 
         const finalJellyfinId = movie.jellyfin_id || (String(movie.id).startsWith('jf_') ? String(movie.id).replace('jf_', '') : null);
         const downloadUrl = finalJellyfinId
-            ? `${JELLYFIN_URL}/Items/${finalJellyfinId}/Download?api_key=${JELLYFIN_API_KEY}`
+            ? `${BACKEND_URL}/api/video/${finalJellyfinId}/?audio=0&sub=-1`
             : "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4";
 
         const safeTitle = movie.title.replace(/[^a-zA-Z0-9]/g, '_');
@@ -1436,16 +1446,18 @@ const LicensesModal = ({ visible, onClose }) => (
 // 3. REPRODUCTOR DE VIDEO (MOTOR HÍBRIDO PREMIUM)
 // ==========================================
 function VideoPlayerScreen({ route, navigation }) {
-    const { updateContinueWatching, setShowCastModal } = useContext(AppContext);
+    const { updateContinueWatching, setShowCastModal, removeFromContinueWatching } = useContext(AppContext);
     // 🔥 Recibimos seriesData
     const { movie, seriesData, startAt = 0, selectedQuality } = route.params;
 
     const finalJellyfinId = movie?.jellyfin_id || (String(movie?.id).startsWith('jf_') ? String(movie.id).replace('jf_', '') : movie?.id);
-    let streamUrl = `${JELLYFIN_URL}/Items/${finalJellyfinId}/Download?api_key=${JELLYFIN_API_KEY}`;
 
-    if (movie?.sourcesMap && movie.sourcesMap[selectedQuality]) {
-        streamUrl = `${JELLYFIN_URL}/Videos/${finalJellyfinId}/stream.mp4?Static=true&MediaSourceId=${movie.sourcesMap[selectedQuality]}&api_key=${JELLYFIN_API_KEY}`;
-    }
+    // Leemos qué idioma y subtítulo quiere el usuario
+    const audioIndex = selectedAudio.value !== undefined ? selectedAudio.value : (movie.audioTracks?.find(a => a.isDefault)?.index ?? 0);
+    const subIndex = selectedSub.type === 'disabled' ? -1 : selectedSub.value;
+
+    // Pasamos por el Proxy de Django
+    const streamUrl = `${BACKEND_URL}/api/video/${finalJellyfinId}/?audio=${audioIndex}&sub=${subIndex}`;
     const { width, height } = useWindowDimensions();
     const isMobile = width < 768;
 
@@ -1454,19 +1466,29 @@ function VideoPlayerScreen({ route, navigation }) {
     const hideGestureTimer = useRef(null);
     const lastUIUpdateTime = useRef(0);
 
-    // 🔥 FIX: RECOLECTOR DE BASURA (Previene el Audio Fantasma)
+    // 🔥 FIX 1: LIMPIEZA Y ROTACIÓN AUTOMÁTICA DE PANTALLA
     useEffect(() => {
+        // 1. Acostar la pantalla al entrar al reproductor
+        if (Platform.OS !== 'web') {
+            ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        }
+
         return () => {
-            // Esta función se ejecuta EXACTAMENTE cuando el usuario sale de la pantalla
+            // 2. Volver a vertical al salir
+            if (Platform.OS !== 'web') {
+                ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+            }
+            // 3. Limpieza de memoria (tu código actual)
             if (videoRef.current) {
                 if (Platform.OS === 'web') {
-                    videoRef.current.pause(); // Forzamos la pausa
-                    videoRef.current.removeAttribute('src'); // Destruimos el origen
-                    videoRef.current.load(); // Vaciamos la memoria RAM
+                    videoRef.current.pause();
+                    videoRef.current.removeAttribute('src');
+                    videoRef.current.load();
+                } else {
+                    videoRef.current.pauseAsync && videoRef.current.pauseAsync();
                 }
-                // Si usamos react-native-video en móviles, pausamos el estado global
-                setStatus(prev => ({ ...prev, isPlaying: false }));
             }
+            setStatus(prev => ({ ...prev, isPlaying: false }));
         };
     }, []);
 
@@ -1477,7 +1499,7 @@ function VideoPlayerScreen({ route, navigation }) {
     // 🔥 NUEVO: Estados para UX de TV y Arrastre 🔥
     const [scrubbingTime, setScrubbingTime] = useState(null);
     const statusRef = useRef(status);
-    useEffect(() => { statusRef.current = status; }, [status]); // Memoria para las flechas de TV
+    useEffect(() => { statusRef.current = status; }, [status]);
 
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const fadeVolumeAnim = useRef(new Animated.Value(0)).current;
@@ -1506,14 +1528,14 @@ function VideoPlayerScreen({ route, navigation }) {
     const initialVolume = useRef(1);
     const initialBrightness = useRef(1);
     const lastTapRef = useRef({ time: 0, side: null });
-    const { PanResponder } = require('react-native');
+
+    // 🔥 FIX 2: SE ELIMINÓ EL REQUIRE DE PANRESPONDER QUE DESTRUÍA LA RAM AQUÍ
 
     useEffect(() => {
         const handleKeyDown = (e) => {
             const key = e.key || '';
             const code = e.keyCode || 0;
 
-            // 22 = Derecha, 21 = Izquierda, 23/66 = OK/Enter, 4 = Atrás
             if (key === 'ArrowRight' || code === 22) { skip(10); setShowControls(true); }
             else if (key === 'ArrowLeft' || code === 21) { skip(-10); setShowControls(true); }
             else if (key === ' ' || key === 'Enter' || code === 23 || code === 66) {
@@ -1523,7 +1545,8 @@ function VideoPlayerScreen({ route, navigation }) {
             else if (key === 'Escape' || code === 4) { navigation.goBack(); }
         };
 
-        if (Platform.OS === 'web' || Platform.OS === 'android') {
+        // Le quitamos el "|| Platform.OS === 'android'" porque Android no usa 'window'
+        if (Platform.OS === 'web') {
             window.addEventListener('keydown', handleKeyDown);
             return () => window.removeEventListener('keydown', handleKeyDown);
         }
@@ -1560,18 +1583,21 @@ function VideoPlayerScreen({ route, navigation }) {
         }
     };
 
-    // 🔥 FIX: Adelantar sin retrasos 🔥
-    // 🔥 FIX: Adelantar con respuesta visual inmediata 🔥
-    const skip = (secs) => {
+    // 🔥 FIX 3: COMANDO DE ADELANTO SEGURO (Reemplaza el .seek que rompía la app)
+    const skip = async (secs) => {
         if (videoRef.current) {
             const newTime = Math.max(0, Math.min(statusRef.current.duration, statusRef.current.currentTime + secs));
-            // Activamos el buffering visualmente para que no se sienta congelado
             setStatus(p => ({ ...p, currentTime: newTime, isBuffering: true }));
-            videoRef.current.seek(newTime);
+
+            if (Platform.OS === 'web') {
+                videoRef.current.currentTime = newTime;
+            } else {
+                await videoRef.current.setPositionAsync(newTime * 1000);
+            }
         }
         resetControlsTimer();
     };
-    // 🔥 FIX: Función para pausar/reproducir el video 🔥
+
     const togglePlayPause = () => { setStatus(p => ({ ...p, isPlaying: !p.isPlaying })); resetControlsTimer(); };
     const toggleCrop = () => { resetControlsTimer(); setResizeModeIndex((prev) => (prev + 1) % resizeModes.length); };
 
@@ -1596,13 +1622,18 @@ function VideoPlayerScreen({ route, navigation }) {
     };
 
     const aplicarCambios = () => {
+        // Guardamos el tiempo exacto para que el video retome donde se quedó al recargar
+        if (statusRef.current.duration > 0) {
+            movie.progress = statusRef.current.currentTime / statusRef.current.duration;
+        }
+
         if (activeModalTab === 'audio') setSelectedAudio({ type: 'index', value: menuAudioTrack });
         else setSelectedSub(menuSubTrack === -1 ? { type: 'disabled' } : { type: 'index', value: menuSubTrack });
+
         setShowTracksModal(false);
         resetControlsTimer();
     };
 
-    // 🔥 TEMPORIZADOR ELEGANTE PARA OCULTAR GESTOS 🔥
     const startHideGestureUITimer = () => {
         if (hideGestureTimer.current) clearTimeout(hideGestureTimer.current);
         hideGestureTimer.current = setTimeout(() => {
@@ -1618,59 +1649,59 @@ function VideoPlayerScreen({ route, navigation }) {
     };
 
     const onLoad = (data) => {
+        // 🔥 FIX 4: AJUSTE DE TIEMPO MILISEGUNDOS VS SEGUNDOS
+        const durationSecs = Platform.OS === 'web' ? data.duration : data.durationMillis / 1000;
         if (data.audioTracks && data.audioTracks.length > 0) setAvailableAudioTracks(data.audioTracks);
         if (data.textTracks && data.textTracks.length > 0) setAvailableTextTracks(data.textTracks);
-        setStatus(p => ({ ...p, duration: data.duration, isBuffering: false }));
+        setStatus(p => ({ ...p, duration: durationSecs, isBuffering: false }));
 
-        if (movie.progress && movie.progress > 0) videoRef.current.seek(data.duration * movie.progress);
-        else if (startAt > 0) videoRef.current.seek(startAt);
+        if (movie.progress && movie.progress > 0) {
+            const startPos = durationSecs * movie.progress;
+            if (Platform.OS === 'web') videoRef.current.currentTime = startPos;
+            else videoRef.current.setPositionAsync(startPos * 1000);
+        } else if (startAt > 0) {
+            if (Platform.OS === 'web') videoRef.current.currentTime = startAt;
+            else videoRef.current.setPositionAsync(startAt * 1000);
+        }
     };
 
-    // 🔥 CEREBRO DE PROGRESO Y AUTOPLAY 🔥
     const onProgress = (data) => {
         const now = Date.now();
         if (now - lastUIUpdateTime.current > 1000) {
-            setStatus(p => ({ ...p, currentTime: data.currentTime }));
+            const currentSecs = Platform.OS === 'web' ? data.currentTime : data.positionMillis / 1000;
+            setStatus(p => ({ ...p, currentTime: currentSecs }));
             lastUIUpdateTime.current = now;
-            const progressVal = data.currentTime / status.duration;
+            const progressVal = currentSecs / status.duration;
 
-            // 1. Guarda el progreso en "Sigue viendo"
             if (progressVal > 0.02 && progressVal < 0.95) {
                 updateContinueWatching(movie, progressVal);
             }
 
-            // 2. Muestra el botón de "Siguiente Episodio" al 90% (Solo para series)
             if (progressVal > 0.90 && (movie.type === 'series' || movie.isAnime || movie.isNovel || movie.type === 'episode')) {
                 setShowNextEpisodeBtn(true);
             } else {
                 setShowNextEpisodeBtn(false);
             }
 
-            // 3. EVENTO DE FIN DE VIDEO (Llegamos al 98% o más)
             if (progressVal > 0.98) {
                 handleVideoEnd();
             }
         }
     };
 
-    // 🔥 LA NUEVA LÓGICA DE AUTO-PLAY 🔥
     const handleVideoEnd = () => {
         const finalId = movie?.jellyfin_id || movie?.id;
-        removeFromContinueWatching(finalId);
 
-        // Si es película, cerramos el reproductor normal
         if (movie.type === 'movie' && !movie.isAnime && !movie.isNovel) {
             if (Platform.OS === 'android') ToastAndroid.show("Película terminada.", ToastAndroid.SHORT);
             navigation.goBack();
             return;
         }
 
-        // Si es episodio, buscamos el siguiente
         if (movie.type === 'episode' && seriesData && seriesData.seasonsData) {
             let nextEp = null;
             let foundCurrent = false;
 
-            // Escaneamos las temporadas buscando el actual
             for (const season of seriesData.seasonsData) {
                 for (const ep of season.episodes) {
                     if (foundCurrent) {
@@ -1684,7 +1715,6 @@ function VideoPlayerScreen({ route, navigation }) {
 
             if (nextEp) {
                 if (Platform.OS === 'android') ToastAndroid.show("Reproduciendo siguiente episodio...", ToastAndroid.SHORT);
-                // 🔥 AUTO-PLAY: Reemplazamos la pantalla actual con el nuevo episodio 🔥
                 navigation.replace('VideoPlayer', { movie: nextEp, seriesData: seriesData, selectedQuality });
             } else {
                 if (Platform.OS === 'android') ToastAndroid.show("Has terminado la serie.", ToastAndroid.SHORT);
@@ -1704,29 +1734,7 @@ function VideoPlayerScreen({ route, navigation }) {
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
 
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            const key = e.key || '';
-            const code = e.keyCode || 0;
-
-            // Códigos para Android TV: 22(Der), 21(Izq), 23/66(OK), 4(Back)
-            if (key === 'ArrowRight' || code === 22) { skip(10); setShowControls(true); }
-            else if (key === 'ArrowLeft' || code === 21) { skip(-10); setShowControls(true); }
-            else if (key === ' ' || key === 'Enter' || code === 23 || code === 66) {
-                togglePlayPause();
-                setShowControls(true);
-            }
-            else if (key === 'Escape' || code === 4) { navigation.goBack(); }
-        };
-
-        if (Platform.OS === 'web' || Platform.OS === 'android') {
-            window.addEventListener('keydown', handleKeyDown);
-            return () => window.removeEventListener('keydown', handleKeyDown);
-        }
-    }, [status]);
-
     return (
-        // 🔥 FIX SCROLLBAR: Forzamos 100vh en web para que la pantalla no se baje ni haya scroll
         <View style={[styles.playerContainer, Platform.OS === 'web' && { height: '100vh', overflow: 'hidden' }]}>
             <StatusBar hidden />
 
@@ -1779,23 +1787,33 @@ function VideoPlayerScreen({ route, navigation }) {
             </Modal>
 
             <View style={styles.videoWrapper}>
-                <Video
-                    ref={videoRef}
-                    source={{ uri: streamUrl }}
-                    style={StyleSheet.absoluteFill}
-                    paused={!status.isPlaying}
-                    resizeMode={resizeModes[resizeModeIndex]}
-                    volume={volumeLevel}
-                    pictureInPicture={isPip}
-                    playInBackground={isPip}
-                    onLoad={onLoad}
-                    onProgress={onProgress}
-                    onBuffer={({ isBuffering }) => setStatus(p => ({ ...p, isBuffering }))}
-                    selectedAudioTrack={selectedAudio}
-                    selectedTextTrack={selectedSub}
-                    bufferConfig={{ minBufferMs: 10000, maxBufferMs: 30000, bufferForPlaybackMs: 1000, bufferForPlaybackAfterRebufferMs: 2500 }}
-                    preventsDisplaySleepDuringVideoPlayback
-                />
+                {/* 🔥 FIX 5: MOTOR CONDICIONAL SEGURO (HTML5 PARA WEB / EXPOVIDEO PARA APP) 🔥 */}
+                {Platform.OS === 'web' ? (
+                    <video
+                        ref={videoRef}
+                        src={streamUrl}
+                        style={{ width: '100%', height: '100%', objectFit: resizeModes[resizeModeIndex] === 'contain' ? 'contain' : 'cover', backgroundColor: '#000', outline: 'none' }}
+                        autoPlay={status.isPlaying}
+                        onTimeUpdate={(e) => onProgress({ currentTime: e.target.currentTime })}
+                        onLoadedMetadata={(e) => onLoad({ duration: e.target.duration })}
+                    />
+                ) : (
+                    <ExpoVideo
+                        ref={videoRef}
+                        source={{ uri: streamUrl }}
+                        style={StyleSheet.absoluteFill}
+                        shouldPlay={status.isPlaying}
+                        resizeMode={resizeModes[resizeModeIndex]}
+                        volume={volumeLevel}
+                        onLoad={onLoad}
+                        onPlaybackStatusUpdate={(s) => {
+                            if (s.isLoaded) {
+                                setStatus(p => ({ ...p, isBuffering: s.isBuffering }));
+                                onProgress(s);
+                            }
+                        }}
+                    />
+                )}
 
                 {isMobile && <View style={[StyleSheet.absoluteFill, { backgroundColor: 'black', opacity: 1 - brightnessLevel, zIndex: 2, elevation: 2, pointerEvents: 'none' }]} />}
 
@@ -1841,7 +1859,6 @@ function VideoPlayerScreen({ route, navigation }) {
                             <Text style={styles.playerTopTitle} numberOfLines={1}>{movie.title}</Text>
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            {/* 🔥 BOTÓN DE TRANSMITIR AGREGADO 🔥 */}
                             <TouchableOpacity activeOpacity={0.6} onPress={() => setShowCastModal(true)} style={[styles.playerCloseBtn, { marginRight: 15 }]}>
                                 <Ionicons name="tv-outline" size={24} color="#fff" />
                             </TouchableOpacity>
@@ -1858,7 +1875,6 @@ function VideoPlayerScreen({ route, navigation }) {
 
                     <LinearGradient colors={['transparent', 'rgba(0,0,0,0.95)']} style={styles.playerBottomBar}>
                         <View style={styles.timeAndBarRow}>
-                            {/* 🔥 UX DE SLIDER: Muestra el tiempo al que arrastras en vivo 🔥 */}
                             <Text style={styles.playerTimeText}>{formatTime(scrubbingTime !== null ? scrubbingTime : status.currentTime)}</Text>
 
                             <View style={[styles.customSliderContainer, { height: 50, justifyContent: 'center' }]}>
@@ -1871,20 +1887,25 @@ function VideoPlayerScreen({ route, navigation }) {
                                     maximumTrackTintColor="#333333"
                                     thumbTintColor="#ffffff"
                                     onSlidingStart={() => { if (timeoutRef.current) clearTimeout(timeoutRef.current); }}
-                                    onValueChange={(val) => { setScrubbingTime(val); }} // Actualiza el texto en vivo
-                                    onSlidingComplete={(val) => {
+                                    onValueChange={(val) => { setScrubbingTime(val); }}
+                                    onSlidingComplete={async (val) => {
                                         setScrubbingTime(null);
-                                        if (videoRef.current) videoRef.current.seek(val);
+                                        // 🔥 FIX 6: USO SEGURO DEL EVENTO SEEK (Punto 2 de los errores)
+                                        if (videoRef.current) {
+                                            if (Platform.OS === 'web') {
+                                                videoRef.current.currentTime = val;
+                                            } else {
+                                                await videoRef.current.setPositionAsync(val * 1000);
+                                            }
+                                        }
                                         resetControlsTimer();
                                     }}
                                 />
                             </View>
-                            {/* 🔥 UX: Tiempo Total en lugar de restante 🔥 */}
                             <Text style={styles.playerTimeText}>{formatTime(status.duration)}</Text>
                         </View>
 
                         <View style={styles.bottomIconsRow}>
-                            {/* Botón: Play / Pausa */}
                             <Pressable
                                 focusable={true}
                                 onPress={togglePlayPause}
@@ -1896,7 +1917,6 @@ function VideoPlayerScreen({ route, navigation }) {
                                 <Ionicons name={status.isPlaying ? "pause" : "play"} size={32} color="#fff" />
                             </Pressable>
 
-                            {/* Botón: Idiomas de Audio */}
                             <Pressable
                                 focusable={true}
                                 onPress={openAudioTracks}
@@ -1908,7 +1928,6 @@ function VideoPlayerScreen({ route, navigation }) {
                                 <Ionicons name="musical-note" size={26} color="#fff" />
                             </Pressable>
 
-                            {/* Botón: Subtítulos */}
                             <Pressable
                                 focusable={true}
                                 onPress={openSubTracks}
@@ -1920,7 +1939,6 @@ function VideoPlayerScreen({ route, navigation }) {
                                 <Ionicons name="chatbox-ellipses-outline" size={26} color="#fff" />
                             </Pressable>
 
-                            {/* Botón: Ajuste de Pantalla (Crop) */}
                             <Pressable
                                 focusable={true}
                                 onPress={toggleCrop}
@@ -2268,27 +2286,31 @@ function SearchScreen({ route, navigation }) {
     const [isInputFocused, setIsInputFocused] = useState(false);
 
     const [isListening, setIsListening] = useState(false);
-    const pulseAnim = useRef(new Animated.Value(1)).current;
-
     const { jellyfinMovies } = useContext(AppContext);
 
-    // 1. CEREBRO DE BÚSQUEDA REMOTA
+    // 🔥 FIX 1: Memoria RAM local para guardar el ID Maestro
+    const jfUserIdRef = useRef(null);
+
+    const sugerenciasVIP = jellyfinMovies ? jellyfinMovies.filter(m => parseFloat(m.imdb) >= 7.5).slice(0, 12) : [];
+
+    // 1. CEREBRO DE BÚSQUEDA REMOTA OPTIMIZADO
     const searchJellyfin = async (query) => {
         if (query.length < 2) { setSearchResults([]); return; }
         setIsSearching(true);
         try {
-            // Buscamos el ID del usuario de Jellyfin
-            const userRes = await fetch(`${JELLYFIN_URL}/Users?api_key=${JELLYFIN_API_KEY}`);
-            const users = await userRes.json();
-            const userId = users[0].Id;
+            // 🔥 FIX 2: Solo le preguntamos a Jellyfin quién es el usuario UNA VEZ en la vida de la app
+            if (!jfUserIdRef.current) {
+                const userRes = await fetch(`${JELLYFIN_URL}/Users?api_key=${JELLYFIN_API_KEY}`);
+                const users = await userRes.json();
+                jfUserIdRef.current = users[0].Id;
+            }
 
-            // 🔥 LLAMADA MAESTRA: Buscamos en toda tu base de datos de 64TB 🔥
-            const url = `${JELLYFIN_URL}/Users/${userId}/Items?searchTerm=${encodeURIComponent(query)}&IncludeItemTypes=Movie,Series&Recursive=true&Fields=Overview,MediaSources,ImageTags&Limit=30&api_key=${JELLYFIN_API_KEY}`;
+            // Usamos la memoria para hacer la búsqueda directa
+            const url = `${JELLYFIN_URL}/Users/${jfUserIdRef.current}/Items?searchTerm=${encodeURIComponent(query)}&IncludeItemTypes=Movie,Series&Recursive=true&Fields=Overview,MediaSources,ImageTags&Limit=30&api_key=${JELLYFIN_API_KEY}`;
 
             const response = await fetch(url);
             const data = await response.json();
 
-            // Formateamos los resultados para que la App los entienda
             const formattedResults = data.Items.map(item => {
                 const hasPrimary = item.ImageTags && item.ImageTags.Primary;
                 const hasBackdrop = item.BackdropImageTags && item.BackdropImageTags.length > 0;
@@ -2297,20 +2319,14 @@ function SearchScreen({ route, navigation }) {
                 const bgUrl = hasBackdrop ? `${JELLYFIN_URL}/Items/${item.Id}/Images/Backdrop?api_key=${JELLYFIN_API_KEY}&maxWidth=1080` : thumbUrl;
 
                 return {
-                    id: item.Id,
-                    jellyfin_id: item.Id,
-                    title: item.Name,
-                    year: item.ProductionYear || 'N/A',
-                    overview: item.Overview || 'Sin sinopsis.',
-                    thumb: thumbUrl,
-                    bgImage: bgUrl, // 🔥 FIX: Añadimos la imagen de fondo para que la vista de detalles no quede negra
+                    id: item.Id, jellyfin_id: item.Id, title: item.Name,
+                    year: item.ProductionYear || 'N/A', overview: item.Overview || 'Sin sinopsis.',
+                    thumb: thumbUrl, bgImage: bgUrl,
                     type: item.Type?.toLowerCase() === 'series' ? 'series' : 'movie',
                     imdb: item.CommunityRating ? item.CommunityRating.toFixed(1) : '5.0',
                     genres: item.Genres?.join(' • ') || 'Premium',
-                    qualities: ['1080p (Original)'],
-                    videoCodec: 'H.264',
-                    director: 'Desconocido',
-                    studio: 'VERTƎX Server'
+                    qualities: ['1080p (Original)'], videoCodec: 'H.264',
+                    director: 'Desconocido', studio: 'VERTƎX Server'
                 };
             });
 
@@ -2322,7 +2338,6 @@ function SearchScreen({ route, navigation }) {
         }
     };
 
-    // 2. TEMPORIZADOR (DEBOUNCE): No satura el servidor mientras escribes
     useEffect(() => {
         const timerId = setTimeout(() => {
             if (searchQuery.length > 1) searchJellyfin(searchQuery);
@@ -2332,11 +2347,8 @@ function SearchScreen({ route, navigation }) {
     }, [searchQuery]);
 
     useEffect(() => {
-        if (debouncedQuery.length > 1) {
-            searchJellyfin(debouncedQuery);
-        } else {
-            setSearchResults([]);
-        }
+        if (debouncedQuery.length > 1) searchJellyfin(debouncedQuery);
+        else setSearchResults([]);
     }, [debouncedQuery]);
 
     const handleVoiceSearch = async () => {
@@ -2347,8 +2359,8 @@ function SearchScreen({ route, navigation }) {
 
     return (
         <View style={{ flex: 1, backgroundColor: '#000' }}>
-            {/* Header Fijo con Blur */}
-            <BlurView intensity={80} tint="dark" style={[styles.searchHeaderPinned, isMobile && { paddingTop: 50, paddingHorizontal: 15 }]}>
+            {/* Header Fijo con Blur - Ajustado el padding vertical para acercar la barra */}
+            <BlurView intensity={80} tint="dark" style={[styles.searchHeaderPinned, { position: 'absolute', top: 0, width: '100%', zIndex: 100, paddingTop: isMobile ? (Platform.OS === 'ios' ? 50 : 30) : 30, paddingBottom: 15, paddingHorizontal: isMobile ? 15 : 80 }]}>
                 <View style={[styles.searchBarWrapper, isInputFocused && { borderColor: PREMIUM_GOLD, backgroundColor: '#111' }]}>
                     <Ionicons name="search" size={20} color={isInputFocused ? PREMIUM_GOLD : "#888"} style={{ marginLeft: 15 }} />
                     <TextInput
@@ -2367,11 +2379,26 @@ function SearchScreen({ route, navigation }) {
                 </View>
             </BlurView>
 
-            <ScrollView contentContainerStyle={{ paddingBottom: 100, paddingTop: isMobile ? 80 : 90 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {/* 🔥 FIX DEL ESPACIADO: Redujimos dramáticamente el paddingTop de 130 a 90 */}
+            <ScrollView contentContainerStyle={{ paddingBottom: 100, paddingTop: isMobile ? 90 : 100 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                 {searchQuery.length === 0 && (
-                    <View style={{ paddingHorizontal: isMobile ? 15 : 80, marginTop: 10 }}>
-                        <MobileCategoryButtons navigation={navigation} />
+                    <View style={{ paddingHorizontal: isMobile ? 15 : 80, marginTop: 5 }}>
+
+                        {/* 1. MÓVIL SOLAMENTE: Botones de categorías */}
+                        {isMobile && (
+                            <MobileCategoryButtons navigation={navigation} />
+                        )}
+
+                        {/* 2. TV Y MÓVIL: Sugerencias para llenar el vacío */}
+                        {sugerenciasVIP.length > 0 && (
+                            <View style={{ marginTop: isMobile ? 5 : 20 }}>
+                                <Text style={{ color: PREMIUM_GOLD, fontSize: 13, fontWeight: 'bold', marginBottom: 15, letterSpacing: 1 }}>
+                                    SUGERENCIAS PARA TI
+                                </Text>
+                                <FilteredGridView movies={sugerenciasVIP} onMoviePress={(m) => navigation.navigate('MovieDetails', { movie: m })} isMobile={isMobile} />
+                            </View>
+                        )}
                     </View>
                 )}
 
@@ -2392,6 +2419,7 @@ function SearchScreen({ route, navigation }) {
                     />
                 )}
             </ScrollView>
+
             {isMobile && <MobileBottomBar currentRoute="Buscar" />}
         </View>
     );
@@ -2865,7 +2893,7 @@ const SeriesDownloadModal = ({ visible, onClose, onSelect, seasonNumber = 1 }) =
 const VLCStreamLinkModal = ({ visible, onClose, movie }) => {
     // Prevenimos el "undefined" buscando el ID correcto
     const finalId = movie.jellyfin_id || (movie.id?.startsWith('jf_') ? movie.id.replace('jf_', '') : movie.id);
-    const streamUrl = `${JELLYFIN_URL}/Items/${finalId}/stream?api_key=${JELLYFIN_API_KEY}&Static=true`;
+    const streamUrl = `${BACKEND_URL}/api/video/${finalId}/?audio=0&sub=-1`;
 
     const copyToClipboard = () => {
         if (Platform.OS === 'web') {
@@ -2995,23 +3023,6 @@ function MovieDetailsScreen({ route, navigation }) {
     const INMERSIVE_HEADER_HEIGHT = isMobile ? height * 0.40 : height * 0.55;
 
     useEffect(() => {
-        const fetchColors = async () => {
-            try {
-                const targetImage = movie.tmdbThumb || movie.thumb || movie.bgImage;
-                if (!targetImage || Platform.OS !== 'web') return;
-
-                const result = await ImageColors.getColors(targetImage, {
-                    fallback: PREMIUM_GOLD,
-                    cache: true,
-                    key: movie.id.toString()
-                });
-                setThemeColor(result.dominant || result.vibrant || PREMIUM_GOLD);
-            } catch (e) { setThemeColor(PREMIUM_GOLD); }
-        };
-        fetchColors();
-    }, [movie]);
-
-    useEffect(() => {
         if (isSeries) {
             setIsLoadingEpisodes(true);
             fetchRealEpisodes();
@@ -3020,7 +3031,10 @@ function MovieDetailsScreen({ route, navigation }) {
 
     const fetchRealEpisodes = async () => {
         try {
-            const res = await fetch(`${JELLYFIN_URL}/Shows/${movie.jellyfin_id}/Episodes?Fields=Overview,MediaSources&api_key=${JELLYFIN_API_KEY}`);
+            const token = await AsyncStorage.getItem('vertex_access');
+            const res = await fetch(`${BACKEND_URL}/api/episodios/${movie.jellyfin_id}/`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             const data = await res.json();
 
             if (data.Items && data.Items.length > 0) {
@@ -3032,7 +3046,8 @@ function MovieDetailsScreen({ route, navigation }) {
                         id: ep.Id, jellyfin_id: ep.Id, episodeNumber: ep.IndexNumber, title: ep.Name,
                         duration: ep.RunTimeTicks ? Math.round(ep.RunTimeTicks / 600000000) + 'm' : '45m',
                         overview: ep.Overview || 'Sin sinopsis disponible.',
-                        thumb: ep.ImageTags && ep.ImageTags.Primary ? `${JELLYFIN_URL}/Items/${ep.Id}/Images/Primary?api_key=${JELLYFIN_API_KEY}` : (movie.bgImage || movie.tmdbBg),
+                        // 🔥 Imagen del episodio también pasa por el proxy 🔥
+                        thumb: ep.ImageTags && ep.ImageTags.Primary ? `${BACKEND_URL}/api/imagen/${ep.Id}/Primary/` : (movie.bgImage || movie.tmdbBg),
                         qualities: ['1080p (Original)'], type: 'episode', audioTracks: movie.audioTracks, videoCodec: movie.videoCodec
                     });
                 });
@@ -3643,9 +3658,10 @@ function AuthScreen({ navigation }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
-    // 🔥 CONFIGURACIÓN DE GOOGLE (Pega aquí tu ID de la foto)
+    // 🔥 CONFIGURACIÓN DE GOOGLE CORREGIDA PARA EVITAR CRASH EN ANDROID 🔥
     const [request, response, promptAsync] = Google.useAuthRequest({
         webClientId: '375847819247-jllcfo7ab2asnl7849fgek61fdjdga81.apps.googleusercontent.com',
+        androidClientId: '375847819247-jllcfo7ab2asnl7849fgek61fdjdga81.apps.googleusercontent.com', // 👈 Agregamos esto para calmar a Expo Go
     });
 
     // Escuchador de la respuesta de Google
@@ -3728,9 +3744,14 @@ function AuthScreen({ navigation }) {
                 body: JSON.stringify({ device_id: hwId, device_name: finalName, device_type: Platform.OS === 'web' ? 'Web' : 'Móvil' })
             });
 
-            // 🔒 Guardamos en la caja fuerte encriptada
-            await SecureStore.setItemAsync('vertex_access', data.access);
-            await SecureStore.setItemAsync('vertex_refresh', data.refresh);
+            // 🔒 Guardamos en la caja fuerte encriptada (o caché si es web)
+            if (Platform.OS === 'web') {
+                await AsyncStorage.setItem('vertex_access', data.access);
+                await AsyncStorage.setItem('vertex_refresh', data.refresh);
+            } else {
+                await SecureStore.setItemAsync('vertex_access', data.access);
+                await SecureStore.setItemAsync('vertex_refresh', data.refresh);
+            }
 
             updateUserData({ id: profileData.id, name: finalName, email: profileData.email, vipDays: profileData.vip_days_left, isVip: profileData.is_vip });
             setIsLoggedIn(true);
