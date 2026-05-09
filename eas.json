@@ -9,14 +9,12 @@
         },
         "preview": {
             "node": "22.13.0",
-            "image": "ubuntu-24.04",
             "android": {
                 "buildType": "apk"
             }
         },
         "production": {
-            "node": "22.13.0",
-            "image": "latest"
+            "node": "22.13.0"
         }
     },
     "submit": {
