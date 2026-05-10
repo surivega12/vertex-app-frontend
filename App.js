@@ -277,6 +277,7 @@ export const AppProvider = ({ children }) => {
     const [offset, setOffset] = useState(0);
 
     const [isAppReady, setIsAppReady] = useState(false);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
 
     // 🔥 AÑADE ESTA LÍNEA AQUÍ 🔥
     const [isOfflineMode, setIsOfflineMode] = useState(false);
