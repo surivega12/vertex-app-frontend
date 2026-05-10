@@ -102,8 +102,8 @@ const PREMIUM_GOLD = '#c1915f';
 const INACTIVE_ICON = '#888888';
 
 // Llamamos a las variables de entorno de forma segura
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-const ADMIN_MASTER_KEY = process.env.EXPO_PUBLIC_ADMIN_MASTER_KEY;
+const BACKEND_URL = "https://vertex-backend-production-a52c.up.railway.app";
+const ADMIN_MASTER_KEY = "Suri.yamki07";
 
 const FALLBACK_HERO = [
     { id: 'h1', title: "PEAKY BLINDERS\nTHE IMMORTAL MAN", year: "2026", rating: "R", lang: "Latino", genres: "Crimen • Drama", overview: "Después de que su hijo distanciado se vea envuelto en un complot nazi, el gánster autoexiliado Tommy Shelby debe regresar a Birmingham.", bgImage: "https://image.tmdb.org/t/p/original/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", thumb: "https://image.tmdb.org/t/p/w500/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", studio: "Netflix", imdb: "7.4", type: "movie" },
@@ -428,7 +428,7 @@ export const AppProvider = ({ children }) => {
     // 2. EXTRACCIÓN AVANZADA DE DATOS (JELLYFIN PREMIUM)
     const fetchJellyfinData = async (isLoadMore = false) => {
         try {
-            const token = await AsyncStorage.getItem('vertex_access');
+            const token = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
             const currentOffset = isLoadMore ? offset + 40 : 0;
 
             const response = await fetch(`${BACKEND_URL}/api/catalogo/?offset=${currentOffset}`, {
@@ -1275,7 +1275,7 @@ const VipLockModal = () => {
             else if (Platform.OS === 'ios') hwId = await Application.getIosIdForVendorAsync();
             else hwId = await AsyncStorage.getItem('vertex_web_id') || 'web-visitor';
 
-            const token = await AsyncStorage.getItem('vertex_access');
+            const token = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
             const response = await fetch(`${BACKEND_URL}/api/canjear-pin/`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ pin: pinInput, device_id: hwId }) // 🔥 AQUÍ ENVIAMOS LA HUELLA
@@ -3691,7 +3691,7 @@ function DownloadsScreen({ navigation }) {
 }
 
 function AuthScreen({ navigation }) {
-    const { setIsLoggedIn, updateUserData } = useContext(AppContext);
+    const { setIsLoggedIn, updateUserData, fetchJellyfinData } = useContext(AppContext);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
@@ -3797,6 +3797,7 @@ function AuthScreen({ navigation }) {
 
             updateUserData({ id: profileData.id, name: finalName, email: profileData.email, vipDays: profileData.vip_days_left, isVip: profileData.is_vip });
             setIsLoggedIn(true);
+            await fetchJellyfinData(false); // 🔥 ESTA ES LA LÍNEA NUEVA
             navigation.navigate('MainCatalog');
         } else {
             Alert.alert("Error", "Correo o contraseña incorrectos.");
