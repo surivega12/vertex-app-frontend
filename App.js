@@ -167,8 +167,11 @@ function ReproductorTV({ route, navigation }) {
         if (!stream_url) {
             const cargarCanales = async () => {
                 try {
-                    // 🔥 FIX: Obligamos a no usar la memoria caché para que refresque siempre los canales
-                    const response = await fetch(`${BACKEND_URL}/api/canales_tv?t=${new Date().getTime()}`);
+                    // 🔥 FIX: Barra correcta, anti-caché y pasaporte de seguridad para Django
+                    const token = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
+                    const response = await fetch(`${BACKEND_URL}/api/canales_tv/?t=${new Date().getTime()}`, {
+                        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                    });
                     if (response.ok) {
                         const data = await response.json();
                         setCanalesLive(data);
@@ -422,6 +425,7 @@ export const AppProvider = ({ children }) => {
             // 🔥 CONEXIÓN PROTEGIDA (Escudo Django + Cuenta Fantasma) 🔥
             const token = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
 
+            // 🔥 FIX REAL: La barra va ANTES del signo de interrogación, no al final.
             const response = await fetch(`${BACKEND_URL}/api/catalogo/?offset=${currentOffset}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -694,7 +698,11 @@ export const AppProvider = ({ children }) => {
             }));
         };
 
-        const downloadResumable = FileSystem.createDownloadResumable(downloadUrl, fileUri, {}, callback);
+        // 🔥 FIX: Pasamos el token para que Django permita bajar el archivo 🔥
+        const token = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
+        const downloadResumable = FileSystem.createDownloadResumable(downloadUrl, fileUri, {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        }, callback);
         downloadResumables.current[downloadId] = downloadResumable;
 
         try {
@@ -1536,6 +1544,16 @@ function VideoPlayerScreen({ route, navigation }) {
     const subIndex = selectedSub.type === 'disabled' ? -1 : selectedSub.value;
     const streamUrl = `${BACKEND_URL}/api/video/${finalJellyfinId}/?audio=${audioIndex}&sub=${subIndex}`;
 
+    // 🔥 NUEVO: Obtenemos el pasaporte para que Django no bloquee el video (Error 401) 🔥
+    const [videoToken, setVideoToken] = useState(null);
+    useEffect(() => {
+        const fetchToken = async () => {
+            const t = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
+            setVideoToken(t);
+        };
+        fetchToken();
+    }, []);
+
     const [menuAudioTrack, setMenuAudioTrack] = useState(defaultAudio);
     const [menuSubTrack, setMenuSubTrack] = useState(defaultSub);
     const [showTracksModal, setShowTracksModal] = useState(false);
@@ -1820,7 +1838,11 @@ function VideoPlayerScreen({ route, navigation }) {
                 ) : (
                     <ExpoVideo
                         ref={videoRef}
-                        source={{ uri: streamUrl }}
+                        source={{
+                            uri: streamUrl,
+                            // Le entregamos el token a ExpoVideo para que pase la seguridad
+                            ...(videoToken ? { headers: { 'Authorization': `Bearer ${videoToken}` } } : {})
+                        }}
                         style={StyleSheet.absoluteFill}
                         shouldPlay={status.isPlaying}
                         resizeMode={resizeModes[resizeModeIndex]}
@@ -2338,10 +2360,16 @@ function SearchScreen({ route, navigation }) {
                 const thumbUrl = hasPrimary ? `${BACKEND_URL}/api/imagen/${item.Id}/Primary/` : null;
                 const bgUrl = hasBackdrop ? `${BACKEND_URL}/api/imagen/${item.Id}/Backdrop/` : thumbUrl;
 
+                // ⚠️ EL GRAN FIX 2: Reemplazar el TMDB fallido y prevenir CRASHES
+                const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TmdbMovie || item.ProviderIds?.TmdbSeries || item.ProviderIds?.TmdbEpisode;
+                const tmdbPoster = tmdbId ? `https://image.tmdb.org/t/p/w500/${tmdbId}.jpg` : null;
+                const tmdbBg = tmdbId ? `https://image.tmdb.org/t/p/w1280/${tmdbId}.jpg` : null;
+
                 return {
                     id: item.Id, jellyfin_id: item.Id, title: item.Name,
                     year: item.ProductionYear || 'N/A', overview: item.Overview || 'Sin sinopsis.',
-                    thumb: thumbUrl, bgImage: bgUrl,
+                    thumb: thumbUrl || tmdbPoster || "https://placehold.co/500x750/111111/c1915f/png?text=VERT%C6%8EX",
+                    bgImage: bgUrl || tmdbBg || "https://placehold.co/1280x720/111111/c1915f/png?text=VERT%C6%8EX",
                     type: item.Type?.toLowerCase() === 'series' ? 'series' : 'movie',
                     imdb: item.CommunityRating ? item.CommunityRating.toFixed(1) : '5.0',
                     genres: item.Genres?.join(' • ') || 'Premium',
@@ -3101,7 +3129,7 @@ function MovieDetailsScreen({ route, navigation }) {
                         duration: ep.RunTimeTicks ? Math.round(ep.RunTimeTicks / 600000000) + 'm' : '45m',
                         overview: ep.Overview || 'Sin sinopsis disponible.',
                         // 🔥 Imagen del episodio también pasa por el proxy 🔥
-                        thumb: ep.ImageTags && ep.ImageTags.Primary ? `${BACKEND_URL}/api/imagen/${ep.Id}/Primary/` : (movie.bgImage || movie.tmdbBg),
+                        thumb: ep.ImageTags && ep.ImageTags.Primary ? `${BACKEND_URL}/api/imagen/${ep.Id}/Primary/` : (movie.bgImage || movie.tmdbBg || "https://placehold.co/500x750/111111/c1915f/png?text=VERT%C6%8EX"),
                         qualities: ['1080p (Original)'], type: 'episode', audioTracks: movie.audioTracks, videoCodec: movie.videoCodec
                     });
                 });
