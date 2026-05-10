@@ -167,8 +167,8 @@ function ReproductorTV({ route, navigation }) {
         if (!stream_url) {
             const cargarCanales = async () => {
                 try {
-                    // 🔥 FIX 1: Se añadió la barra "/" al final. Obligatorio para Django.
-                    const response = await fetch(`${BACKEND_URL}/api/canales_tv`);
+                    // 🔥 FIX: Obligamos a no usar la memoria caché para que refresque siempre los canales
+                    const response = await fetch(`${BACKEND_URL}/api/canales_tv?t=${new Date().getTime()}`);
                     if (response.ok) {
                         const data = await response.json();
                         setCanalesLive(data);
@@ -1473,13 +1473,6 @@ function VideoPlayerScreen({ route, navigation }) {
 
     const finalJellyfinId = movie?.jellyfin_id || (String(movie?.id).startsWith('jf_') ? String(movie.id).replace('jf_', '') : movie?.id);
 
-    // Leemos qué idioma y subtítulo quiere el usuario
-    const audioIndex = selectedAudio.value !== undefined ? selectedAudio.value : (movie.audioTracks?.find(a => a.isDefault)?.index ?? 0);
-    const subIndex = selectedSub.type === 'disabled' ? -1 : selectedSub.value;
-
-    // 🔥 STREAM SEGURO PASANDO POR EL PROXY DE DJANGO 🔥
-    const streamUrl = `${BACKEND_URL}/api/video/${finalJellyfinId}/?audio=${audioIndex}&sub=${subIndex}`;
-    const { width, height } = useWindowDimensions();
     const isMobile = width < 768;
 
     const videoRef = useRef(null);
@@ -1537,6 +1530,12 @@ function VideoPlayerScreen({ route, navigation }) {
     const [availableTextTracks, setAvailableTextTracks] = useState([]);
     const [selectedAudio, setSelectedAudio] = useState({ type: 'index', value: defaultAudio });
     const [selectedSub, setSelectedSub] = useState({ type: 'disabled' });
+
+    // 🔥 FIX: RESTAURAMOS LA RUTA DEL VIDEO QUE SE HABÍA BORRADO 🔥
+    const audioIndex = selectedAudio.value !== undefined ? selectedAudio.value : defaultAudio;
+    const subIndex = selectedSub.type === 'disabled' ? -1 : selectedSub.value;
+    const streamUrl = `${BACKEND_URL}/api/video/${finalJellyfinId}/?audio=${audioIndex}&sub=${subIndex}`;
+
     const [menuAudioTrack, setMenuAudioTrack] = useState(defaultAudio);
     const [menuSubTrack, setMenuSubTrack] = useState(defaultSub);
     const [showTracksModal, setShowTracksModal] = useState(false);
@@ -1986,7 +1985,8 @@ function HomeScreen({ route, navigation }) {
         watchlist, toggleWatchlist, continueWatching,
         removeFromContinueWatching, jellyfinMovies,
         isOfflineMode,
-        isCasting, connectedTV
+        isCasting, connectedTV,
+        attemptPlay // 🔥 FALTABA ESTO AQUÍ
     } = useContext(AppContext);
 
     const { width, height } = useWindowDimensions();
@@ -2334,8 +2334,9 @@ function SearchScreen({ route, navigation }) {
                 const hasPrimary = item.ImageTags && item.ImageTags.Primary;
                 const hasBackdrop = item.BackdropImageTags && item.BackdropImageTags.length > 0;
 
-                const thumbUrl = hasPrimary ? `${JELLYFIN_URL}/Items/${item.Id}/Images/Primary?api_key=${JELLYFIN_API_KEY}&maxWidth=400` : null;
-                const bgUrl = hasBackdrop ? `${JELLYFIN_URL}/Items/${item.Id}/Images/Backdrop?api_key=${JELLYFIN_API_KEY}&maxWidth=1080` : thumbUrl;
+                // 🔥 IMÁGENES PROTEGIDAS POR DJANGO EN EL BUSCADOR 🔥
+                const thumbUrl = hasPrimary ? `${BACKEND_URL}/api/imagen/${item.Id}/Primary/` : null;
+                const bgUrl = hasBackdrop ? `${BACKEND_URL}/api/imagen/${item.Id}/Backdrop/` : thumbUrl;
 
                 return {
                     id: item.Id, jellyfin_id: item.Id, title: item.Name,
