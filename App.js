@@ -3703,9 +3703,8 @@ function AuthScreen({ navigation }) {
     // 🔥 CONFIGURACIÓN DE GOOGLE CORREGIDA PARA EVITAR CRASH EN ANDROID 🔥
     const [request, response, promptAsync] = Google.useAuthRequest({
         webClientId: '375847819247-jllcfo7ab2asnl7849fgek61fdjdga81.apps.googleusercontent.com',
-        androidClientId: '375847819247-jllcfo7ab2asnl7849fgek61fdjdga81.apps.googleusercontent.com', // 👈 Agregamos esto para calmar a Expo Go
+        androidClientId: '375847819247-6mb43urau0otdtod7unjaora090r59ll.apps.googleusercontent.com',
     });
-
     // Escuchador de la respuesta de Google
     useEffect(() => {
         if (response?.type === 'success') {
