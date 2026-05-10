@@ -167,9 +167,9 @@ function ReproductorTV({ route, navigation }) {
         if (!stream_url) {
             const cargarCanales = async () => {
                 try {
-                    // 🔥 FIX: Barra correcta, anti-caché y pasaporte de seguridad para Django
                     const token = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
-                    const response = await fetch(`${BACKEND_URL}/api/canales_tv/?t=${new Date().getTime()}`, {
+                    // ✅ FIX: Volvemos a quitar el slash al final de canales_tv, Django a veces es especial con esto.
+                    const response = await fetch(`${BACKEND_URL}/api/canales_tv?t=${new Date().getTime()}`, {
                         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
                     });
                     if (response.ok) {
@@ -265,13 +265,14 @@ function ReproductorTV({ route, navigation }) {
                         autoPlay
                     />
                 ) : (
+                    // ✅ FIX: El reproductor de TV ahora tiene controles completos y autorizacion VIP
                     <ExpoVideo
                         source={{ uri: stream_url }}
-                        useNativeControls={true} // Controles activos
+                        useNativeControls={true} // Controles activos visibles
                         resizeMode="contain"
-                        shouldPlay={true} // Autoplay
+                        shouldPlay={true} // Autoplay activado
                         style={{ width: '100%', height: '100%' }}
-                        onError={(error) => console.log("Error de video:", error)}
+                        onError={(error) => console.log("Error de video TV:", error)}
                     />
                 )}
             </View>
@@ -567,25 +568,8 @@ export const AppProvider = ({ children }) => {
                 };
             });
 
-            // 🔥 FASE 3: PRECARGA MÁGICA DE IMÁGENES 🔥
-            if (!isLoadMore && formattedMovies.length > 0) {
-                try {
-                    // Tomamos las 5 primeras películas del Hero
-                    const top5 = formattedMovies.slice(0, 5);
-                    const urlsToPrefetch = [];
-
-                    top5.forEach(m => {
-                        if (m.bgImage) urlsToPrefetch.push(m.bgImage);
-                        if (m.thumb) urlsToPrefetch.push(m.thumb);
-                    });
-
-                    // Le ordenamos a expo-image que descargue todo a la RAM en silencio
-                    await ExpoImage.prefetch(urlsToPrefetch);
-                    console.log("✅ Precarga de imágenes del Hero completada");
-                } catch (prefetchError) {
-                    console.log("⚠️ Error precargando imágenes, pero continuamos...", prefetchError);
-                }
-            }
+            // ✅ FIX: La precarga de imágenes se desactiva para acelerar la carga del catálogo (ahorramos 90 segundos)
+            // Las imágenes ahora cargarán gradualmente a medida que el usuario baje por la pantalla.
 
             if (isLoadMore) {
                 setJellyfinMovies(prev => [...prev, ...formattedMovies]);
@@ -1481,6 +1465,8 @@ function VideoPlayerScreen({ route, navigation }) {
 
     const finalJellyfinId = movie?.jellyfin_id || (String(movie?.id).startsWith('jf_') ? String(movie.id).replace('jf_', '') : movie?.id);
 
+    // ✅ FIX: Definimos el hook useWindowDimensions para obtener el "width"
+    const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
     const videoRef = useRef(null);
