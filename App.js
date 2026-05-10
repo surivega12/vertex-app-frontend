@@ -19,6 +19,7 @@ import * as SecureStore from 'expo-secure-store'; // 🔥 FIX: Bóveda de encrip
 import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import { makeRedirectUri } from 'expo-auth-session';
 // 🔥 NUEVO: Triada de tareas y escudo Anti-Sueño
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
@@ -180,6 +181,18 @@ function ReproductorTV({ route, navigation }) {
             cargarCanales();
         }
     }, [stream_url]);
+    // 🔥 Pega esto justo aquí:
+    useEffect(() => {
+        if (stream_url && Platform.OS !== 'web') {
+            ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        }
+
+        return () => {
+            if (Platform.OS !== 'web') {
+                ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+            }
+        };
+    }, [stream_url]);
 
     // 🛑 SI NO HAY CANAL SELECCIONADO -> MOSTRAR LA PARRILLA
     if (!stream_url) {
@@ -250,10 +263,11 @@ function ReproductorTV({ route, navigation }) {
                 ) : (
                     <ExpoVideo
                         source={{ uri: stream_url }}
-                        useNativeControls
+                        useNativeControls={true} // Controles activos
                         resizeMode="contain"
-                        shouldPlay
+                        shouldPlay={true} // Autoplay
                         style={{ width: '100%', height: '100%' }}
+                        onError={(error) => console.log("Error de video:", error)}
                     />
                 )}
             </View>
@@ -3704,6 +3718,9 @@ function AuthScreen({ navigation }) {
     const [request, response, promptAsync] = Google.useAuthRequest({
         webClientId: '375847819247-jllcfo7ab2asnl7849fgek61fdjdga81.apps.googleusercontent.com',
         androidClientId: '375847819247-6mb43urau0otdtod7unjaora090r59ll.apps.googleusercontent.com',
+        redirectUri: makeRedirectUri({
+            scheme: 'com.yamki0.premiumstreamapp' // Asegúrate de que coincida con tu app.json
+        }),
     });
     // Escuchador de la respuesta de Google
     useEffect(() => {
