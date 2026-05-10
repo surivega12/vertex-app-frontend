@@ -265,7 +265,7 @@ function ReproductorTV({ route, navigation }) {
                         autoPlay
                     />
                 ) : (
-                    // ✅ FIX: El reproductor de TV ahora tiene controles completos y autorizacion VIP
+                    // ✅ FIX: El reproductor de TV ahora tiene controles completos
                     <ExpoVideo
                         source={{ uri: stream_url }}
                         useNativeControls={true} // Controles activos visibles
@@ -3353,10 +3353,15 @@ function CategoryScreen({ route, navigation }) {
 
     const getBaseMovies = () => {
         const sourceData = jellyfinMovies && jellyfinMovies.length > 0 ? jellyfinMovies : FALLBACK_HERO;
-        if (category === 'Películas') return sourceData.filter(m => m.type === 'movie' && !m.isAnime);
-        if (category === 'Serie') return sourceData.filter(m => m.type === 'series' && !m.isNovel && !m.isAnime);
+
+        if (category === 'Películas') return sourceData.filter(m => m.type === 'movie' && !m.isAnime && !m.isNovel);
+
+        // 🔥 FIX: Relajamos el filtro. Si tiene datos de temporadas (seasonsData), se asume que es serie obligatoriamente.
+        if (category === 'Serie') return sourceData.filter(m => (m.type === 'series' || (m.seasonsData && m.seasonsData.length > 0)) && !m.isNovel && !m.isAnime);
+
         if (category === 'Novelas') return sourceData.filter(m => m.isNovel);
         if (category === 'Animes') return sourceData.filter(m => m.isAnime);
+
         return sourceData;
     };
 
