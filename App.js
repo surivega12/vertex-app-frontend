@@ -106,6 +106,7 @@ const INACTIVE_ICON = '#888888';
 const BACKEND_URL = "https://vertex-backend-production-a52c.up.railway.app";
 const ADMIN_MASTER_KEY = "Suri.yamki07";
 
+
 const FALLBACK_HERO = [
     { id: 'h1', title: "PEAKY BLINDERS\nTHE IMMORTAL MAN", year: "2026", rating: "R", lang: "Latino", genres: "Crimen • Drama", overview: "Después de que su hijo distanciado se vea envuelto en un complot nazi, el gánster autoexiliado Tommy Shelby debe regresar a Birmingham.", bgImage: "https://image.tmdb.org/t/p/original/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", thumb: "https://image.tmdb.org/t/p/w500/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", studio: "Netflix", imdb: "7.4", type: "movie" },
     { id: 'h2', title: "DEADPOOL Y LOBEZNO", year: "2024", rating: "R", lang: "Latino", genres: "Acción • Comedia", overview: "Un apático Wade Wilson se afana en la vida civil tras dejar atrás sus días como el mercenario moralmente flexible.", bgImage: "https://image.tmdb.org/t/p/original/yDHYTfA3R0jFYba16ZAKAW51A71.jpg", thumb: "https://image.tmdb.org/t/p/w500/yDHYTfA3R0jFYba16ZAKAW51A71.jpg", studio: "Disney+", imdb: "7.9", type: "movie" },
@@ -327,60 +328,41 @@ export const AppProvider = ({ children }) => {
                     else setDailyHistory({ date: new Date().toDateString(), watched: [] }); // Resetea si es un nuevo día
                 }
 
-                // 🔥 MAGIA DE SEGURIDAD: VERIFICAMOS SI YA HABÍA INICIADO SESIÓN ANTES 🔥
+                // 🔥 MAGIA DE SEGURIDAD: AUTO-LOGIN FANTASMA O SESIÓN REAL 🔥
                 if (hasInternet) {
-                    const savedToken = Platform.OS === 'web'
-                        ? await AsyncStorage.getItem('vertex_access')
-                        : await SecureStore.getItemAsync('vertex_access');
+                    let savedToken = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
+
+                    // Si no tiene token (es un usuario nuevo), iniciamos sesión con la cuenta Fantasma
+                    if (!savedToken) {
+                        try {
+                            const ghostRes = await fetch(`${BACKEND_URL}/api/login/`, {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ username: 'invitado@vertex.com', password: 'VertexGratis2026' })
+                            });
+                            if (ghostRes.ok) {
+                                const ghostData = await ghostRes.json();
+                                savedToken = ghostData.access;
+                                if (Platform.OS === 'web') await AsyncStorage.setItem('vertex_access', savedToken);
+                                else await SecureStore.setItemAsync('vertex_access', savedToken);
+                            }
+                        } catch (e) { console.log("Error creando sesión fantasma"); }
+                    }
+
                     if (savedToken) {
                         try {
-                            const profileRes = await fetch(`${BACKEND_URL}/api/perfil/`, {
-                                headers: { 'Authorization': `Bearer ${savedToken}` }
-                            });
+                            const profileRes = await fetch(`${BACKEND_URL}/api/perfil/`, { headers: { 'Authorization': `Bearer ${savedToken}` } });
                             if (profileRes.ok) {
                                 const profileData = await profileRes.json();
                                 setUser(prev => ({
-                                    ...prev,
-                                    id: profileData.id,
-                                    name: profileData.username,
-                                    email: profileData.email,
-                                    vipDays: profileData.vip_days_left,
-                                    isVip: profileData.is_vip
+                                    ...prev, id: profileData.id, name: profileData.username === 'invitado@vertex.com' ? 'Usuario Gratuito' : profileData.username,
+                                    email: profileData.email, vipDays: profileData.vip_days_left, isVip: profileData.is_vip, downloadLimit: 1 // 🔥 Límite de 1 descarga a la vez
                                 }));
-                                setIsLoggedIn(true); // Token válido: ¡Pasa directo sin pedir clave!
+                                setIsLoggedIn(true);
                             } else {
-                                // El token expiró o es inválido, limpiamos y lo mandamos a login
-                                if (Platform.OS === 'web') {
-                                    await AsyncStorage.removeItem('vertex_access');
-                                    await AsyncStorage.removeItem('vertex_refresh');
-                                } else {
-                                    if (Platform.OS === 'web') {
-                                        await AsyncStorage.removeItem('vertex_access');
-                                        await AsyncStorage.removeItem('vertex_refresh');
-                                    } else {
-                                        await SecureStore.deleteItemAsync('vertex_access');
-                                        await SecureStore.deleteItemAsync('vertex_refresh');
-                                    }
-                                }
                                 setIsLoggedIn(false);
                             }
-                        } catch (e) {
-                            console.log("El servidor Django está apagado. No se pudo verificar la sesión.");
-                        }
-                    } else {
-                        setIsLoggedIn(false); // No hay token guardado
+                        } catch (e) { setIsLoggedIn(false); }
                     }
-                }
-
-                if (!hasInternet) {
-                    console.log("✈️ MODO OFFLINE DETECTADO");
-                    setIsOfflineMode(true);
-                    if (Platform.OS !== 'web') {
-                        Alert.alert("Modo Sin Conexión", "No hay internet. Has entrado a tu Bóveda Local.");
-                    }
-                } else {
-                    setIsOfflineMode(false);
-                    await fetchJellyfinData(false);
                 }
             } catch (e) {
                 console.log("Error inicializando app", e);
@@ -398,39 +380,32 @@ export const AppProvider = ({ children }) => {
     useEffect(() => { if (isAppReady) AsyncStorage.setItem('vertex_dl', JSON.stringify(completedDownloads)); }, [completedDownloads, isAppReady]);
 
     const attemptPlay = async (movie, proceedToPlay) => {
-        // REGLA 1: Si no hay cuenta, no hay video. Mandamos a Login.
-        if (!isLoggedIn) {
-            Alert.alert("Acceso Restringido", "Debes iniciar sesión para acceder a los 5 videos gratuitos diarios.");
-            navigation.navigate('Auth');
-            return;
-        }
-
-        // REGLA 2: Los VIP no tienen límites
+        // Si es VIP, pasa directo sin gastar créditos
         if (user.isVip || user.vipDays > 0) {
             proceedToPlay();
             return;
         }
 
+        // LÓGICA FREEMIUM: 5 Videos diarios
         const today = new Date().toDateString();
         let currentHistory = { ...dailyHistory };
-
-        if (currentHistory.date !== today) {
-            currentHistory = { date: today, watched: [] };
-        }
+        if (currentHistory.date !== today) currentHistory = { date: today, watched: [] };
 
         const finalId = movie.jellyfin_id || movie.id;
 
-        // Si ya vio este video hoy, no consume crédito
+        // Si ya vio este video hoy, lo dejamos pasar gratis
         if (currentHistory.watched.includes(finalId)) {
             proceedToPlay();
             return;
         }
-        // Nota: El historial ya está vinculado al dispositivo mediante AsyncStorage
+
+        // Si ya vio 5 videos diferentes hoy, sale el muro de pago
         if (currentHistory.watched.length >= 5) {
             setShowVipModal(true);
             return;
         }
 
+        // Si tiene saldo, le restamos 1 y guardamos
         const newWatched = [...currentHistory.watched, finalId];
         const updatedHistory = { date: today, watched: newWatched };
         setDailyHistory(updatedHistory);
@@ -442,8 +417,10 @@ export const AppProvider = ({ children }) => {
     // 2. EXTRACCIÓN AVANZADA DE DATOS (JELLYFIN PREMIUM)
     const fetchJellyfinData = async (isLoadMore = false) => {
         try {
-            const token = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
             const currentOffset = isLoadMore ? offset + 40 : 0;
+
+            // 🔥 CONEXIÓN PROTEGIDA (Escudo Django + Cuenta Fantasma) 🔥
+            const token = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
 
             const response = await fetch(`${BACKEND_URL}/api/catalogo/?offset=${currentOffset}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -466,7 +443,7 @@ export const AppProvider = ({ children }) => {
                 const hasPrimary = item.ImageTags && item.ImageTags.Primary;
                 const hasBackdrop = item.BackdropImageTags && item.BackdropImageTags.length > 0;
 
-                // Ahora las imágenes pasan por nuestro Proxy en Django
+                // 🔥 IMÁGENES PROTEGIDAS POR EL PROXY DE DJANGO 🔥
                 const jellyfinPrimary = hasPrimary ? `${BACKEND_URL}/api/imagen/${item.Id}/Primary/` : null;
                 const jellyfinBackdrop = hasBackdrop ? `${BACKEND_URL}/api/imagen/${item.Id}/Backdrop/` : null;
 
@@ -668,6 +645,28 @@ export const AppProvider = ({ children }) => {
     // 7. EL MOTOR REAL DE DESCARGAS Y BÓVEDA OFFLINE
     const startDownloadProcess = async (movie, qualityStr, isWeb = false) => {
         setShowDataModal(false);
+
+        // 🔥 LÍMITE DE 5 DESCARGAS DIARIAS PARA USUARIOS GRATIS 🔥
+        if (!user.isVip && user.vipDays <= 0) {
+            const dlHistory = await AsyncStorage.getItem('vertex_daily_dl');
+            let parsedDl = dlHistory ? JSON.parse(dlHistory) : { date: new Date().toDateString(), count: 0 };
+
+            // Si es un nuevo día, reseteamos a 0
+            if (parsedDl.date !== new Date().toDateString()) {
+                parsedDl = { date: new Date().toDateString(), count: 0 };
+            }
+
+            // Si ya descargó 5 hoy, le mostramos el cartel VIP y bloqueamos la descarga
+            if (parsedDl.count >= 5) {
+                setShowVipModal(true);
+                return;
+            }
+
+            // Le sumamos 1 al conteo y lo guardamos
+            parsedDl.count += 1;
+            await AsyncStorage.setItem('vertex_daily_dl', JSON.stringify(parsedDl));
+        }
+
         const downloadId = movie.id.toString();
 
         if (activeDownloads[downloadId]) return;
@@ -1478,7 +1477,7 @@ function VideoPlayerScreen({ route, navigation }) {
     const audioIndex = selectedAudio.value !== undefined ? selectedAudio.value : (movie.audioTracks?.find(a => a.isDefault)?.index ?? 0);
     const subIndex = selectedSub.type === 'disabled' ? -1 : selectedSub.value;
 
-    // Pasamos por el Proxy de Django
+    // 🔥 STREAM SEGURO PASANDO POR EL PROXY DE DJANGO 🔥
     const streamUrl = `${BACKEND_URL}/api/video/${finalJellyfinId}/?audio=${audioIndex}&sub=${subIndex}`;
     const { width, height } = useWindowDimensions();
     const isMobile = width < 768;
@@ -2320,17 +2319,15 @@ function SearchScreen({ route, navigation }) {
         if (query.length < 2) { setSearchResults([]); return; }
         setIsSearching(true);
         try {
-            // 🔥 FIX 2: Solo le preguntamos a Jellyfin quién es el usuario UNA VEZ en la vida de la app
-            if (!jfUserIdRef.current) {
-                const userRes = await fetch(`${JELLYFIN_URL}/Users?api_key=${JELLYFIN_API_KEY}`);
-                const users = await userRes.json();
-                jfUserIdRef.current = users[0].Id;
-            }
+            // 🔥 BÚSQUEDA PROTEGIDA (Escudo Django) 🔥
+            const token = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
 
-            // Usamos la memoria para hacer la búsqueda directa
-            const url = `${JELLYFIN_URL}/Users/${jfUserIdRef.current}/Items?searchTerm=${encodeURIComponent(query)}&IncludeItemTypes=Movie,Series&Recursive=true&Fields=Overview,MediaSources,ImageTags&Limit=30&api_key=${JELLYFIN_API_KEY}`;
+            // Usamos el parámetro 'search' de tu backend
+            const url = `${BACKEND_URL}/api/catalogo/?search=${encodeURIComponent(query)}`;
 
-            const response = await fetch(url);
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             const data = await response.json();
 
             const formattedResults = data.Items.map(item => {
