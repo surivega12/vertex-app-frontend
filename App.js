@@ -1320,7 +1320,7 @@ const VipLockModal = () => {
 
                     {!showPinBox ? (
                         <View style={{ width: '100%' }}>
-                            <TouchableOpacity style={[styles.authBtnPrimary, { height: 60, marginBottom: 15 }]} onPress={() => Linking.openURL("https://vertex-vex.netlify.app/checkout.html")}>
+                            <TouchableOpacity style={[styles.authBtnPrimary, { height: 60, marginBottom: 15 }]} onPress={() => Linking.openURL("https://vex-vertex.netlify.app/checkout.html")}>
                                 <Text style={[styles.authBtnPrimaryText, { fontSize: 16 }]}>DESBLOQUEAR ACCESO VIP</Text>
                             </TouchableOpacity>
 
@@ -2900,7 +2900,7 @@ function LinkedDevicesScreen({ navigation }) {
                         style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(193, 145, 95, 0.1)', paddingVertical: 14, paddingHorizontal: 40, borderRadius: 30, borderWidth: 1, borderColor: PREMIUM_GOLD }}
                         onPress={() => {
                             // Este es el enlace que sacará al usuario a tu web de pago
-                            const paymentUrl = "https://vertex-vex.netlify.app/checkout.html";
+                            const paymentUrl = "https://vex-vertex.netlify.app/checkout.html";
                             Linking.openURL(paymentUrl);
                         }}
                     >
