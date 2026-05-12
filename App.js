@@ -462,9 +462,7 @@ export const AppProvider = ({ children }) => {
                 const jellyfinBackdrop = hasBackdrop ? `${BACKEND_URL}/api/imagen/${item.Id}/Backdrop/` : null;
 
                 const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TmdbMovie || item.ProviderIds?.TmdbSeries || item.ProviderIds?.TmdbEpisode;
-                // 🔥 CALIDAD PREMIUM OPTIMIZADA (Alta definición sin saturar la RAM)
-                const tmdbPoster = tmdbId ? `https://image.tmdb.org/t/p/w780/${tmdbId}.jpg` : null;
-                const tmdbBg = tmdbId ? `https://image.tmdb.org/t/p/w1280/${tmdbId}.jpg` : null;
+                // TMDB requires image hashes, not IDs. We will use the High-Quality Jellyfin Proxy instead.
 
 
                 const director = item.People?.find(p => p.Type === 'Director')?.Name || 'Desconocido';
@@ -529,11 +527,11 @@ export const AppProvider = ({ children }) => {
                     lang: audioTracks.length > 1 ? 'Multi' : (audioTracks[0]?.language || 'Latino'),
                     genres: item.Genres && item.Genres.length > 0 ? item.Genres.slice(0, 2).join(' • ') : 'Premium',
                     overview: item.Overview && item.Overview !== "" ? item.Overview : 'Sin sinopsis disponible desde el servidor.',
-                    // 🔥 Aquí pegamos tu código para máxima calidad:
-                    thumb: tmdbPoster || jellyfinPrimary || fallbackBg,
-                    bgImage: tmdbBg || jellyfinBackdrop || jellyfinPrimary || fallbackBg,
-                    tmdbThumb: tmdbPoster || fallbackBg,
-                    tmdbBg: tmdbBg || tmdbPoster || fallbackBg,
+                    // 🔥 Usando el proxy Jellyfin en alta calidad:
+                    thumb: jellyfinPrimary || fallbackBg,
+                    bgImage: jellyfinBackdrop || jellyfinPrimary || fallbackBg,
+                    tmdbThumb: jellyfinPrimary || fallbackBg,
+                    tmdbBg: jellyfinBackdrop || jellyfinPrimary || fallbackBg,
                     // ------------------------------------------------
                     type: finalType, isAnime, isNovel, isAnimacion,
                     imdb: item.CommunityRating ? item.CommunityRating.toFixed(1) : '5.0',
@@ -3367,7 +3365,8 @@ function CategoryScreen({ route, navigation }) {
 
     const handleScroll = async (event) => {
         const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-        const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 400;
+        // Reduced the threshold so it triggers exactly when you reach the bottom of the grid
+        const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 150;
 
         // 🔥 FIX: Solo pide más películas si no está cargando Y si todavía quedan películas (hasMore)
         if (isCloseToBottom && !isLoadingMore && hasMore) {
