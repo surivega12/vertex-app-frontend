@@ -108,12 +108,12 @@ const ADMIN_MASTER_KEY = "Suri.yamki07";
 
 
 const FALLBACK_HERO = [
-    { id: 'h1', title: "PEAKY BLINDERS\nTHE IMMORTAL MAN", year: "2026", rating: "R", lang: "Latino", genres: "Crimen • Drama", overview: "Después de que su hijo distanciado se vea envuelto en un complot nazi, el gánster autoexiliado Tommy Shelby debe regresar a Birmingham.", bgImage: "https://image.tmdb.org/t/p/original/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", thumb: "https://image.tmdb.org/t/p/w500/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", studio: "Netflix", imdb: "7.4", type: "movie" },
-    { id: 'h2', title: "DEADPOOL Y LOBEZNO", year: "2024", rating: "R", lang: "Latino", genres: "Acción • Comedia", overview: "Un apático Wade Wilson se afana en la vida civil tras dejar atrás sus días como el mercenario moralmente flexible.", bgImage: "https://image.tmdb.org/t/p/original/yDHYTfA3R0jFYba16ZAKAW51A71.jpg", thumb: "https://image.tmdb.org/t/p/w500/yDHYTfA3R0jFYba16ZAKAW51A71.jpg", studio: "Disney+", imdb: "7.9", type: "movie" },
-    { id: 'h3', title: "PROJECT HAIL MARY", year: "2026", rating: "PG-13", lang: "Latino", genres: "Ciencia ficción • Aventura", overview: "El profesor de ciencias Ryland Grace despierta en una nave espacial a años luz de casa sin recordar quién es ni cómo llegó allí.", bgImage: "https://image.tmdb.org/t/p/original/vQvjU8E0ZfGxqXQ9nCq11jXyPzY.jpg", thumb: "https://image.tmdb.org/t/p/w500/vQvjU8E0ZfGxqXQ9nCq11jXyPzY.jpg", studio: "Prime Video", imdb: "8.5", type: "movie" },
-    { id: 'h4', title: "ZOOTOPIA 2", year: "2025", rating: "A", lang: "Latino", genres: "Animación • Comedia • Familia", overview: "Los detectives Judy Hopps y Nick Wilde se asocian de nuevo para resolver un nuevo caso.", bgImage: "https://image.tmdb.org/t/p/original/h3fwjQhQ7qC07QJ8YyI8R5oR8fA.jpg", thumb: "https://image.tmdb.org/t/p/w500/h3fwjQhQ7qC07QJ8YyI8R5oR8fA.jpg", studio: "Disney+", imdb: "8.0", type: "movie" },
+    { id: 'h1', title: "PEAKY BLINDERS\nTHE IMMORTAL MAN", year: "2026", rating: "R", lang: "Latino", genres: "Crimen • Drama", overview: "Después de que su hijo distanciado se vea envuelto en un complot nazi, el gánster autoexiliado Tommy Shelby debe regresar a Birmingham.", bgImage: "https://image.tmdb.org/t/p/w1280/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", thumb: "https://image.tmdb.org/t/p/w500/xxA9bE8kZl1xXG9Q8zN1bT8V8aI.jpg", studio: "Netflix", imdb: "7.4", type: "movie" },
+    { id: 'h2', title: "DEADPOOL Y LOBEZNO", year: "2024", rating: "R", lang: "Latino", genres: "Acción • Comedia", overview: "Un apático Wade Wilson se afana en la vida civil tras dejar atrás sus días como el mercenario moralmente flexible.", bgImage: "https://image.tmdb.org/t/p/w1280/yDHYTfA3R0jFYba16ZAKAW51A71.jpg", thumb: "https://image.tmdb.org/t/p/w500/yDHYTfA3R0jFYba16ZAKAW51A71.jpg", studio: "Disney+", imdb: "7.9", type: "movie" },
+    { id: 'h3', title: "PROJECT HAIL MARY", year: "2026", rating: "PG-13", lang: "Latino", genres: "Ciencia ficción • Aventura", overview: "El profesor de ciencias Ryland Grace despierta en una nave espacial a años luz de casa sin recordar quién es ni cómo llegó allí.", bgImage: "https://image.tmdb.org/t/p/w1280/vQvjU8E0ZfGxqXQ9nCq11jXyPzY.jpg", thumb: "https://image.tmdb.org/t/p/w500/vQvjU8E0ZfGxqXQ9nCq11jXyPzY.jpg", studio: "Prime Video", imdb: "8.5", type: "movie" },
+    { id: 'h4', title: "ZOOTOPIA 2", year: "2025", rating: "A", lang: "Latino", genres: "Animación • Comedia • Familia", overview: "Los detectives Judy Hopps y Nick Wilde se asocian de nuevo para resolver un nuevo caso.", bgImage: "https://image.tmdb.org/t/p/w1280/h3fwjQhQ7qC07QJ8YyI8R5oR8fA.jpg", thumb: "https://image.tmdb.org/t/p/w500/h3fwjQhQ7qC07QJ8YyI8R5oR8fA.jpg", studio: "Disney+", imdb: "8.0", type: "movie" },
     {
-        id: 'h5', title: "DEMON SLAYER:\nINFINITY CASTLE", year: "2025", rating: "B15", lang: "Latino", genres: "Animación • Acción", overview: "La batalla final entre los cazadores de demonios y Muzan Kibutsuji comienza.", bgImage: "https://image.tmdb.org/t/p/original/x2RS3hTcsxeEQO19T2iU1wP9Iu.jpg", thumb: "https://image.tmdb.org/t/p/w500/x2RS3hTcsxeEQO19T2iU1wP9Iu.jpg", studio: "Netflix", imdb: "9.1", type: "anime",
+        id: 'h5', title: "DEMON SLAYER:\nINFINITY CASTLE", year: "2025", rating: "B15", lang: "Latino", genres: "Animación • Acción", overview: "La batalla final entre los cazadores de demonios y Muzan Kibutsuji comienza.", bgImage: "https://image.tmdb.org/t/p/w1280/x2RS3hTcsxeEQO19T2iU1wP9Iu.jpg", thumb: "https://image.tmdb.org/t/p/w500/x2RS3hTcsxeEQO19T2iU1wP9Iu.jpg", studio: "Netflix", imdb: "9.1", type: "anime",
         seasons: [
             {
                 id: 's1', seasonNumber: 1, title: 'Temporada 1',
@@ -462,9 +462,9 @@ export const AppProvider = ({ children }) => {
                 const jellyfinBackdrop = hasBackdrop ? `${BACKEND_URL}/api/imagen/${item.Id}/Backdrop/` : null;
 
                 const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TmdbMovie || item.ProviderIds?.TmdbSeries || item.ProviderIds?.TmdbEpisode;
-                // 🔥 MAXIMA CALIDAD TMDB
-                const tmdbPoster = tmdbId ? `https://image.tmdb.org/t/p/original/${tmdbId}.jpg` : null;
-                const tmdbBg = tmdbId ? `https://image.tmdb.org/t/p/original/${tmdbId}.jpg` : null;
+                // 🔥 CALIDAD PREMIUM OPTIMIZADA (Alta definición sin saturar la RAM)
+                const tmdbPoster = tmdbId ? `https://image.tmdb.org/t/p/w780/${tmdbId}.jpg` : null;
+                const tmdbBg = tmdbId ? `https://image.tmdb.org/t/p/w1280/${tmdbId}.jpg` : null;
 
 
                 const director = item.People?.find(p => p.Type === 'Director')?.Name || 'Desconocido';
