@@ -3390,8 +3390,8 @@ function CategoryScreen({ route, navigation }) {
             <ScrollView
                 style={styles.mainScreen}
                 contentContainerStyle={{ paddingBottom: isMobile ? 100 : 60, paddingTop: isMobile ? 50 : 60 }}
-                onScroll={handleScroll} // Conectado al scroll infinito
-                scrollEventThrottle={400}
+                onScroll={handleScroll}
+                scrollEventThrottle={16} // 🔥 FIX: Precisión milimétrica para detectar el fondo
                 showsVerticalScrollIndicator={false}
             >
                 <View style={{ paddingHorizontal: isMobile ? 15 : 80, marginBottom: 20, paddingLeft: isMobile ? 65 : 80 }}>
@@ -3436,12 +3436,23 @@ function CategoryScreen({ route, navigation }) {
                     )
                 )}
 
-                {/* 🔥 SPINNER DE CARGA INFINITA */}
-                {isLoadingMore && (
-                    <View style={{ paddingVertical: 25, alignItems: 'center' }}>
+                {/* 🔥 SPINNER DE CARGA INFINITA Y BOTÓN MANUAL 🔥 */}
+                {isLoadingMore ? (
+                    <View style={{ paddingVertical: 35, alignItems: 'center' }}>
                         <ActivityIndicator size="large" color={PREMIUM_GOLD} />
-                        <Text style={{ color: PREMIUM_GOLD, marginTop: 10, fontSize: 12, fontWeight: 'bold' }}>Cargando más títulos...</Text>
+                        <Text style={{ color: PREMIUM_GOLD, marginTop: 10, fontSize: 12, fontWeight: 'bold' }}>Cargando catálogo...</Text>
                     </View>
+                ) : hasMore && (
+                    <TouchableOpacity
+                        style={{ alignSelf: 'center', marginVertical: 30, paddingVertical: 12, paddingHorizontal: 30, backgroundColor: 'rgba(193, 145, 95, 0.1)', borderRadius: 20, borderWidth: 1, borderColor: '#c1915f' }}
+                        onPress={async () => {
+                            setIsLoadingMore(true);
+                            await fetchJellyfinData(true);
+                            setIsLoadingMore(false);
+                        }}
+                    >
+                        <Text style={{ color: '#c1915f', fontWeight: 'bold', letterSpacing: 1 }}>CARGAR MÁS CONTENIDO</Text>
+                    </TouchableOpacity>
                 )}
             </ScrollView>
         </View>
