@@ -293,7 +293,7 @@ export const AppProvider = ({ children }) => {
     // FIX 2: Dejamos un usuario vacío por defecto hasta que Django nos diga quién es
     const [user, setUser] = useState({ name: "", photo: "", status: "Usuario Gratuito", vipDays: 0, downloadLimit: 1 });
     const [jellyfinMovies, setJellyfinMovies] = useState([]);
-    const [offset, setOffset] = useState(0);
+    const offsetRef = useRef(0);
 
     const [isAppReady, setIsAppReady] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -427,56 +427,45 @@ export const AppProvider = ({ children }) => {
         proceedToPlay();
     };
 
-    // 2. EXTRACCIÓN AVANZADA DE DATOS (JELLYFIN PREMIUM)
     const fetchJellyfinData = async (isLoadMore = false) => {
         try {
-            const currentOffset = isLoadMore ? offset + 40 : 0;
+            // 🔥 FIX: Usamos la memoria inalterable para saber en qué página vamos
+            const currentOffset = isLoadMore ? offsetRef.current + 40 : 0;
 
-            // 🔥 CONEXIÓN PROTEGIDA (Escudo Django + Cuenta Fantasma) 🔥
             const token = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
-
-            // 🔥 FIX REAL: La barra va ANTES del signo de interrogación, no al final.
             const response = await fetch(`${BACKEND_URL}/api/catalogo/?offset=${currentOffset}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const moviesData = await response.json();
 
-            // 🛡️ ESCUDO ANTI-CRASH MEJORADO
             if (!response.ok || !moviesData || !moviesData.Items || moviesData.Items.length === 0) {
-                setHasMore(false); // 🔥 Le decimos a la app que ya no hay más contenido en Jellyfin
+                setHasMore(false);
                 setIsLoadingMore(false);
                 return;
             }
 
-            // Si es la primera carga y hay resultados, reseteamos el freno
             if (!isLoadMore) setHasMore(true);
 
-            // 🔥 FIX: Usamos un placeholder más estable y con diseño acorde a VERTƎX
             const fallbackBg = "https://placehold.co/500x750/111111/c1915f/png?text=VERT%C6%8EX";
 
             const formattedMovies = moviesData.Items.map(item => {
-
-                // 1. PREPARAMOS LOS ENLACES DE JELLYFIN (🔥 OPTIMIZADOS 🔥)
                 const hasPrimary = item.ImageTags && item.ImageTags.Primary;
                 const hasBackdrop = item.BackdropImageTags && item.BackdropImageTags.length > 0;
 
-                // 🔥 IMÁGENES PROTEGIDAS POR EL PROXY DE DJANGO 🔥
                 const jellyfinPrimary = hasPrimary ? `${BACKEND_URL}/api/imagen/${item.Id}/Primary/` : null;
                 const jellyfinBackdrop = hasBackdrop ? `${BACKEND_URL}/api/imagen/${item.Id}/Backdrop/` : null;
 
-                // 2. PREPARAMOS EL ESCUDO ANTI-404 (THE MOVIE DB)
                 const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TmdbMovie || item.ProviderIds?.TmdbSeries || item.ProviderIds?.TmdbEpisode;
-
-                const tmdbPoster = tmdbId ? `https://image.tmdb.org/t/p/w500/${tmdbId}.jpg` : null;
-                // 🔥 FIX: Cambiamos 'original' por 'w1280' para que no descargue fondos gigantes de 5MB si falla Jellyfin
-                const tmdbBg = tmdbId ? `https://image.tmdb.org/t/p/w1280/${tmdbId}.jpg` : null;
+                // 🔥 MAXIMA CALIDAD TMDB
+                const tmdbPoster = tmdbId ? `https://image.tmdb.org/t/p/original/${tmdbId}.jpg` : null;
+                const tmdbBg = tmdbId ? `https://image.tmdb.org/t/p/original/${tmdbId}.jpg` : null;
 
                 const director = item.People?.find(p => p.Type === 'Director')?.Name || 'Desconocido';
                 const studio = item.Studios?.length > 0 ? item.Studios[0].Name : 'Desconocido';
 
                 let videoQualities = []; let audioTracks = []; let subtitles = [];
                 let videoCodec = 'H.264'; let audioCodec = 'AAC';
-                let sourcesMap = {}; // 🔥 NUEVO: El cerebro que guarda los IDs de los archivos
+                let sourcesMap = {};
 
                 if (item.MediaSources && item.MediaSources.length > 0) {
                     item.MediaSources.forEach(source => {
@@ -488,13 +477,8 @@ export const AppProvider = ({ children }) => {
                             else if (videoStream.Width >= 1900) qualityName = '1080p';
                             else qualityName = '720p';
 
-                            if (!videoQualities.includes(qualityName)) {
-                                videoQualities.push(qualityName);
-                            }
-
-                            // 🔥 MAGIA: Guardamos el ID del archivo asignado a su calidad
+                            if (!videoQualities.includes(qualityName)) videoQualities.push(qualityName);
                             sourcesMap[qualityName] = source.Id;
-
                             if (videoStream.Codec) videoCodec = videoStream.Codec.toUpperCase();
                         }
                     });
@@ -507,55 +491,29 @@ export const AppProvider = ({ children }) => {
                     subtitles = firstStreams.filter(s => s.Type === 'Subtitle').map(s => ({ index: s.Index, language: s.Language ? s.Language.toUpperCase() : 'UND', title: s.Title || s.DisplayTitle || `Subtítulo ${s.Index}`, isDefault: s.IsDefault }));
                 }
 
-                // 🔥 PUNTO 1: LIMPIADOR INTELIGENTE DE TÍTULOS 🔥
                 const cleanTitle = (rawTitle) => {
                     if (!rawTitle) return "Desconocido";
-                    return rawTitle
-                        .replace(/(\(|\[).*?(1080p|4k|720p|x264|x265|hevc|bluray|web-dl|dual|latino|aac|ac3|hd).*?(\)|\])/gi, '')
-                        .replace(/1080p|4K|720p|x264|x265|HEVC|BluRay|WEB-DL|Dual Audio|Latino|Sub|HD/gi, '')
-                        .replace(/\.(mkv|mp4|avi|mov)$/i, '')
-                        .replace(/[\._]/g, ' ')
-                        .trim();
+                    return rawTitle.replace(/(\(|\[).*?(1080p|4k|720p|x264|x265|hevc|bluray|web-dl|dual|latino|aac|ac3|hd).*?(\)|\])/gi, '').replace(/1080p|4K|720p|x264|x265|HEVC|BluRay|WEB-DL|Dual Audio|Latino|Sub|HD/gi, '').replace(/\.(mkv|mp4|avi|mov)$/i, '').replace(/[\._]/g, ' ').trim();
                 };
 
-                const finalCleanTitle = cleanTitle(item.Name); // Aquí aplicamos la limpieza
-
-                // 🔥 FIX 2: CEREBRO DE CATEGORIZACIÓN INTELIGENTE
+                const finalCleanTitle = cleanTitle(item.Name);
                 const tagsString = item.Tags ? item.Tags.join(" ").toLowerCase() : "";
                 const genresString = item.Genres ? item.Genres.join(" ").toLowerCase() : "";
                 const pathString = item.Path ? item.Path.toLowerCase() : "";
                 const titleString = finalCleanTitle.toLowerCase();
 
-                // 🔥 FIX: Categorización blindada usando solo Géneros y Etiquetas (Ignoramos el Path que puede venir vacío)
                 const isAnime = genresString.includes("anime") || tagsString.includes("anime");
                 const isNovel = genresString.includes("novela") || tagsString.includes("novela") || genresString.includes("dorama") || tagsString.includes("dorama");
-
                 const isAnimacion = genresString.includes("animación") || genresString.includes("animacion") || genresString.includes("family") || genresString.includes("kids") || isAnime || genresString.includes("animation");
 
-                // Lógica de Series
                 const isEpisodePattern = item.Type?.toLowerCase() === 'episode' || /s\d{2}e\d{2}/i.test(titleString) || /temporada/i.test(titleString) || /capítulo/i.test(titleString);
                 const isSeriesOrEpisode = item.Type?.toLowerCase() === 'series' || item.Type?.toLowerCase() === 'season' || item.Type?.toLowerCase() === 'episode' || isEpisodePattern || pathString.includes("/series/");
-
                 const finalType = isSeriesOrEpisode ? 'series' : 'movie';
 
-                // Extraemos temporadas si existen, o creamos la "Virtual" para capítulos sueltos
                 let seasonsDataFormated = [];
-                if (item.Seasons && item.Seasons.length > 0) {
-                    seasonsDataFormated = item.Seasons;
-                } else if (finalType === 'series') {
-                    seasonsDataFormated = [{
-                        id: 'virtual_season',
-                        seasonNumber: 1,
-                        title: 'Episodios',
-                        episodes: [{
-                            id: item.Id,
-                            episodeNumber: 1,
-                            title: item.Name,
-                            duration: 'Desconocida',
-                            overview: item.Overview || 'Sin descripción',
-                            thumb: jellyfinPrimary || fallbackBg
-                        }]
-                    }];
+                if (item.Seasons && item.Seasons.length > 0) seasonsDataFormated = item.Seasons;
+                else if (finalType === 'series') {
+                    seasonsDataFormated = [{ id: 'virtual_season', seasonNumber: 1, title: 'Episodios', episodes: [{ id: item.Id, episodeNumber: 1, title: item.Name, duration: 'Desconocida', overview: item.Overview || 'Sin descripción', thumb: jellyfinPrimary || fallbackBg }] }];
                 }
 
                 return {
@@ -564,30 +522,29 @@ export const AppProvider = ({ children }) => {
                     lang: audioTracks.length > 1 ? 'Multi' : (audioTracks[0]?.language || 'Latino'),
                     genres: item.Genres && item.Genres.length > 0 ? item.Genres.slice(0, 2).join(' • ') : 'Premium',
                     overview: item.Overview && item.Overview !== "" ? item.Overview : 'Sin sinopsis disponible desde el servidor.',
-                    thumb: jellyfinPrimary,
-                    bgImage: jellyfinBackdrop || jellyfinPrimary,
+                    // 🔥 Aquí pegamos tu código para máxima calidad:
+                    thumb: tmdbPoster || jellyfinPrimary || fallbackBg,
+                    bgImage: tmdbBg || jellyfinBackdrop || jellyfinPrimary || fallbackBg,
                     tmdbThumb: tmdbPoster || fallbackBg,
                     tmdbBg: tmdbBg || tmdbPoster || fallbackBg,
-                    type: finalType,
-                    isAnime, isNovel, isAnimacion,
+                    // ------------------------------------------------
+                    type: finalType, isAnime, isNovel, isAnimacion,
                     imdb: item.CommunityRating ? item.CommunityRating.toFixed(1) : '5.0',
-                    director, studio,
-                    qualities: videoQualities.length > 0 ? videoQualities : ['1080p (Original)'],
-                    audioTracks, subtitles,
-                    seasonsData: seasonsDataFormated,
-                    videoCodec, audioCodec,
-                    sourcesMap // 🔥 Agregamos el mapa a la base de datos de la app
+                    director, studio, qualities: videoQualities.length > 0 ? videoQualities : ['1080p (Original)'],
+                    audioTracks, subtitles, seasonsData: seasonsDataFormated, videoCodec, audioCodec, sourcesMap
                 };
             });
 
-            // ✅ FIX: La precarga de imágenes se desactiva para acelerar la carga del catálogo (ahorramos 90 segundos)
-            // Las imágenes ahora cargarán gradualmente a medida que el usuario baje por la pantalla.
-
             if (isLoadMore) {
-                setJellyfinMovies(prev => [...prev, ...formattedMovies]);
-                setOffset(currentOffset);
+                setJellyfinMovies(prev => {
+                    // Evitamos que se dupliquen las peliculas si el scroll es muy agresivo
+                    const newMovies = formattedMovies.filter(nm => !prev.some(pm => pm.id === nm.id));
+                    return [...prev, ...newMovies];
+                });
+                offsetRef.current = currentOffset; // Guardamos la página nueva
             } else {
                 setJellyfinMovies(formattedMovies);
+                offsetRef.current = 0; // Reiniciamos a 0 si refresca todo
             }
         } catch (error) { console.log("Error cargando Jellyfin:", error); }
     };
@@ -2067,6 +2024,7 @@ function HomeScreen({ route, navigation }) {
     const novelsOnly = displayData.filter(m => m.type === 'novel');
     const animesOnly = displayData.filter(m => m.type === 'anime');
     const recomendados = displayData.filter(m => parseFloat(m.imdb) >= 7.5);
+    const tendencias = displayData.sort((a, b) => (b.year || 0) - (a.year || 0)).slice(0, 15);
 
     const openMovieDetails = (movieData) => { navigation.navigate('MovieDetails', { movie: movieData }); };
 
@@ -2137,109 +2095,103 @@ function HomeScreen({ route, navigation }) {
             {isMobile && <MobileHeader scrollY={scrollY} heroHeight={HERO_HEIGHT} />}
 
             {/* 📺 ========================================================
-                CAPA 1: EL FONDO FIJO Y DINÁMICO (AHORA RESPONDE AL SCROLL)
+                CAPA 1: FONDO 
                ======================================================== */}
             {!isMobile && !selectedStudio && activeHero && (
-                <Animated.View style={[StyleSheet.absoluteFillObject, { zIndex: 0, opacity: backgroundOpacity }]}>
+                <View style={StyleSheet.absoluteFillObject}>
                     <ExpoImage
                         key={`bg-${activeHero.id}`}
                         source={{ uri: activeHero.bgImage || activeHero.tmdbBg || activeHero.thumb }}
                         style={StyleSheet.absoluteFillObject}
                         contentFit="cover"
-                        transition={300}
+                        transition={500}
                     />
-                    {/* Degradados agresivos para asegurar legibilidad del texto */}
-                    <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)', '#000000']} start={{ x: 0, y: 0.3 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
-                    <LinearGradient colors={['#000000', 'rgba(0,0,0,0.6)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 0.5, y: 0 }} style={StyleSheet.absoluteFillObject} />
-                </Animated.View>
+                    {/* Degradado Cinehax: Oscuro abajo (para listas) y a la izquierda (texto) */}
+                    <LinearGradient colors={['#050505', 'rgba(5,5,5,0.6)', 'transparent']} start={{ x: 0, y: 0.5 }} end={{ x: 0.5, y: 0.5 }} style={StyleSheet.absoluteFillObject} />
+                    <LinearGradient colors={['transparent', 'rgba(5,5,5,0.9)', '#050505']} start={{ x: 0, y: 0.3 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
+                </View>
             )}
 
             {/* 📺 ========================================================
-                CAPA 2: SCROLL COMPLETO (EFECTO NUVIO TV)
+                CAPA 2: INFORMACIÓN FLOTANTE
+               ======================================================== */}
+            {!isMobile && !selectedStudio && activeHero && (
+                <View style={{ position: 'absolute', top: 90, left: 100, width: '45%', zIndex: 10 }}>
+                    <Text style={{ color: '#fff', fontSize: 55, fontWeight: '900', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 10, marginBottom: 15 }} numberOfLines={2}>
+                        {activeHero.title}
+                    </Text>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 10 }}>
+                        <Text style={{ color: '#aaa', fontSize: 14, fontWeight: 'bold' }}>{activeHero.year}</Text>
+                        <Text style={{ color: '#666' }}>|</Text>
+                        <Text style={{ color: '#aaa', fontSize: 14, fontWeight: 'bold', textTransform: 'uppercase' }}>{activeHero.type === 'series' ? 'SERIE' : 'PELÍCULA'}</Text>
+                        <Text style={{ color: '#666' }}>|</Text>
+                        <Text style={{ color: '#aaa', fontSize: 14, fontWeight: 'bold', textTransform: 'uppercase' }}>{activeHero.genres?.split(' • ')[0] || 'PREMIUM'}</Text>
+                    </View>
+
+                    <Text style={{ color: '#e2e2e2', fontSize: 16, lineHeight: 26, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 5, marginBottom: 30 }} numberOfLines={4}>
+                        {activeHero.overview}
+                    </Text>
+
+                    <View style={{ flexDirection: 'row', gap: 15 }}>
+                        <TouchableOpacity style={[styles.btnPlayFlexible, { backgroundColor: '#fff', height: 50, maxWidth: 200 }]} onPress={() => handlePlayPress(activeHero)}>
+                            <Ionicons name="play" size={22} color="#000" />
+                            <Text style={[styles.btnPlayGoldenText, { color: '#000' }]}>Reproducir</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.btnIconDark, { height: 50, width: 60, backgroundColor: 'rgba(255,255,255,0.1)' }]} onPress={() => toggleWatchlist(activeHero)}>
+                            <Ionicons name={watchlist.some(m => m.id === activeHero.id) ? "checkmark" : "add"} size={26} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
+
+            {/* 📺 ========================================================
+                CAPA 3: LISTAS CON SCROLL (Efecto Netflix TV / Centrado Móvil)
                ======================================================== */}
             <View style={{ flex: 1, zIndex: 10 }}>
                 <Animated.ScrollView
                     ref={scrollViewRef}
                     style={{ flex: 1 }}
-                    contentContainerStyle={{ paddingBottom: isMobile ? 100 : 80 }}
+                    contentContainerStyle={{ paddingBottom: isMobile ? 100 : 0 }}
                     onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* INFO DEL HERO (TV) - AHORA SE MUEVE CON EL SCROLL */}
-                    {!isMobile && !selectedStudio && activeHero && (
-                        <View style={{ width: '100%', height: HERO_HEIGHT, justifyContent: 'center', paddingLeft: 80, paddingTop: 40 }}>
-                            <View style={{ width: '55%' }}>
-                                <Text style={[styles.heroTitle, { fontSize: 55, color: '#fff', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 10, textTransform: 'uppercase', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', marginBottom: 10 }]} numberOfLines={2}>
-                                    {activeHero.title}
-                                </Text>
+                    {/* Espacio transparente en TV para ver la portada del fondo */}
+                    {!isMobile && !selectedStudio && <View style={{ height: height * 0.70 }} />}
 
-                                <View style={[styles.heroTags, { marginBottom: 20 }]}>
-                                    <Text style={[styles.tagText, { fontSize: 16, fontWeight: 'bold', color: '#fff' }]}>{activeHero.year}</Text><Text style={styles.tagDot}> • </Text>
-                                    <View style={[styles.tagBox, { borderColor: '#fff', borderWidth: 1, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: 'rgba(0,0,0,0.5)' }]}><Text style={[styles.tagText, { color: '#fff', fontSize: 14 }]}>{activeHero.rating || 'VIP'}</Text></View><Text style={styles.tagDot}> • </Text>
-                                    <Text style={[styles.tagText, { fontSize: 16, fontWeight: 'bold', color: '#fff' }]}>{activeHero.lang || 'Latino'}</Text>
-                                </View>
-
-                                <Text style={{ fontSize: 16, lineHeight: 26, color: '#e0e0e0', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 6, marginBottom: 30 }} numberOfLines={4}>
-                                    {activeHero.overview}
-                                </Text>
-
-                                <View style={[styles.detailsActionRow, { maxWidth: 450 }]}>
-                                    <TouchableOpacity style={[styles.btnPlayFlexible, { backgroundColor: '#fff', height: 50 }]} onPress={() => handlePlayPress(activeHero)}>
-                                        <Ionicons name="play" size={22} color="#000" />
-                                        <Text style={[styles.btnPlayGoldenText, { color: '#000' }]}>Reproducir</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={[styles.btnIconDark, { height: 50, width: 60 }]} onPress={() => toggleWatchlist(activeHero)}>
-                                        <Ionicons name={watchlist.some(m => m.id === activeHero.id) ? "checkmark" : "add"} size={26} color="#fff" />
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Hero Móvil Clásico (Se renderiza SOLO si es móvil) */}
+                    {/* Hero Móvil Corregido (Centrado y sin cortes) */}
                     {isMobile && !selectedStudio && activeHero && (
-                        <View style={{ width: width, height: HERO_HEIGHT, backgroundColor: '#000', overflow: 'hidden' }}>
+                        <View style={{ width: width, height: HERO_HEIGHT, backgroundColor: '#000', overflow: 'hidden', justifyContent: 'center' }}>
                             <View style={StyleSheet.absoluteFillObject}>
-                                <Image
+                                <ExpoImage
                                     key={`bg-${activeHero.id}`}
                                     source={{ uri: activeHero.bgImage || activeHero.thumb }}
                                     style={StyleSheet.absoluteFillObject}
-                                    resizeMode="cover"
+                                    contentFit="cover"
                                 />
-                                <LinearGradient
-                                    colors={['transparent', 'rgba(0,0,0,0.8)', '#000000']}
-                                    start={{ x: 0, y: 0.2 }}
-                                    end={{ x: 0, y: 1 }}
-                                    style={StyleSheet.absoluteFillObject}
-                                />
-                                <View style={[StyleSheet.absoluteFill, { justifyContent: 'flex-end', paddingBottom: 25, paddingHorizontal: 20, alignItems: 'center' }]}>
-                                    <Text style={[styles.heroTitle, { fontSize: 34, textAlign: 'center', color: '#ebd197', textTransform: 'uppercase', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 1, marginBottom: 15 }]}>{activeHero.title}</Text>
+                                <LinearGradient colors={['#000', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.3 }} style={StyleSheet.absoluteFillObject} />
+                                <LinearGradient colors={['transparent', '#050505']} start={{ x: 0, y: 0.4 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
 
-                                    <View style={[styles.heroTags, { marginBottom: 15 }]}>
-                                        <Text style={[styles.tagText, { fontSize: 13, fontWeight: 'bold', color: '#fff', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 4 }]}>{activeHero.year}</Text><Text style={styles.tagDot}> • </Text>
-                                        <View style={[styles.tagBox, { borderColor: '#fff', borderWidth: 1, borderRadius: 2, paddingHorizontal: 6, paddingVertical: 1, backgroundColor: 'rgba(0,0,0,0.5)' }]}><Text style={[styles.tagText, { color: '#fff', fontSize: 11 }]}>{activeHero.rating || 'VIP'}</Text></View><Text style={styles.tagDot}> • </Text>
-                                        <Text style={[styles.tagText, { fontSize: 13, fontWeight: 'bold', color: '#fff', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 4 }]}>{activeHero.lang || 'Latino'}</Text>
+                                <View style={[StyleSheet.absoluteFill, { justifyContent: 'flex-end', paddingBottom: 40, paddingHorizontal: 20, alignItems: 'center' }]}>
+                                    <Text style={[styles.heroTitle, { fontSize: 32, textAlign: 'center', color: '#fff', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 10, fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 1, marginBottom: 10 }]} numberOfLines={2}>{activeHero.title}</Text>
+
+                                    <View style={[styles.heroTags, { justifyCenter: 'center', marginBottom: 15 }]}>
+                                        <Text style={[styles.tagText, { color: '#fff' }]}>{activeHero.year}</Text><Text style={styles.tagDot}> • </Text>
+                                        <View style={styles.tagBox}><Text style={[styles.tagText, { color: '#fff', fontSize: 11 }]}>{activeHero.rating || 'VIP'}</Text></View><Text style={styles.tagDot}> • </Text>
+                                        <Text style={[styles.tagText, { color: '#fff' }]}>{activeHero.lang || 'Latino'}</Text>
                                     </View>
 
-                                    <Text style={[styles.heroGenres, { textAlign: 'center', marginBottom: 20, color: '#e0e0e0', fontWeight: 'bold', fontSize: 12 }]} numberOfLines={1}>
-                                        {activeHero.genres}
-                                    </Text>
+                                    <Text style={[styles.heroGenres, { textAlign: 'center', marginBottom: 25, color: '#e0e0e0', fontWeight: 'bold' }]} numberOfLines={1}>{activeHero.genres}</Text>
 
-                                    <View style={{ flexDirection: 'row', justifyContent: 'center', width: '100%', gap: 15, alignItems: 'center' }}>
-                                        <TouchableOpacity style={[styles.btnPlayHeroMobile, { flex: undefined, width: 220, height: 50, borderRadius: 8, marginRight: 0 }]} onPress={() => handlePlayPress(activeHero)}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'center', width: '100%', gap: 15 }}>
+                                        <TouchableOpacity style={[styles.btnPlayFlexible, { backgroundColor: '#fff', maxWidth: 220, height: 50 }]} onPress={() => handlePlayPress(activeHero)}>
                                             <Ionicons name="play" size={24} color="#000" />
-                                            <Text style={[styles.btnPlayTextMobile, { fontSize: 18 }]}>Mira ahora</Text>
+                                            <Text style={[styles.btnPlayGoldenText, { color: '#000' }]}>MIRA AHORA</Text>
                                         </TouchableOpacity>
-                                        <TouchableOpacity style={[styles.btnAddHeroMobile, { backgroundColor: 'rgba(255,255,255,0.15)', height: 50, width: 50, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' }]} onPress={() => toggleWatchlist(activeHero)}>
-                                            <Ionicons name={watchlist.some(m => m.id === activeHero.id) ? "checkmark" : "add"} size={28} color="#fff" />
+                                        <TouchableOpacity style={[styles.btnIconDark, { height: 50, width: 50 }]} onPress={() => toggleWatchlist(activeHero)}>
+                                            <Ionicons name={watchlist.some(m => m.id === activeHero.id) ? "checkmark" : "add"} size={26} color="#fff" />
                                         </TouchableOpacity>
-                                    </View>
-
-                                    <View style={[styles.paginationDots, { marginTop: 15 }]}>
-                                        {topHeroMovies.map((_, i) => (
-                                            <View key={i} style={[styles.dot, { backgroundColor: heroIndex === i ? '#fff' : 'rgba(255,255,255,0.3)', width: heroIndex === i ? 6 : 5, height: heroIndex === i ? 6 : 5 }]} />
-                                        ))}
                                     </View>
                                 </View>
                             </View>
@@ -2247,8 +2199,8 @@ function HomeScreen({ route, navigation }) {
                     )}
 
                     {/* 📚 FILAS DE CONTENIDO (MÓVIL Y TV) */}
-                    {/* En TV las listas ahora quedan montadas de forma natural sobre el fondo oscurecido */}
-                    <View style={{ marginTop: isMobile ? 25 : -80, zIndex: 10 }}>
+                    {/* 🔥 EL TRUCO NETFLIX: Fondo oscuro sólido para que las filas tapen la imagen de arriba en TV 🔥 */}
+                    <View style={{ backgroundColor: isMobile ? 'transparent' : '#050505', paddingTop: isMobile ? 15 : 40, paddingBottom: 50, zIndex: 10, minHeight: height }}>
                         {!selectedStudio && continueWatching.length > 0 && (
                             <ContinueWatchingList
                                 title="Sigue viendo"
@@ -2262,6 +2214,9 @@ function HomeScreen({ route, navigation }) {
                                 onViewAll={() => navigation.navigate('History')}
                             />
                         )}
+
+                        {/* 🔥 Aquí pegamos tu código de Tendencias: */}
+                        {!selectedStudio && tendencias.length > 0 && <MovieList title="TENDENCIAS ESTA SEMANA" data={tendencias} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
 
                         {!selectedStudio && <MovieList title="Agregados Recientemente" data={displayData} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
                         {!selectedStudio && recomendados.length > 0 && <MovieList title="Recomendados para ti" data={recomendados} onMoviePress={openMovieDetails} isMobile={isMobile} onFocusChange={setTvFocusedMovie} />}
@@ -3353,7 +3308,7 @@ const CATEGORY_TABS_NOVELAS = ["Todas", "Asiáticas", "Latinas"];
 // 🟢 CATEGORÍAS CON SCROLL INFINITO (PAGINACIÓN)
 function CategoryScreen({ route, navigation }) {
     const { category } = route.params;
-    const { jellyfinMovies, fetchJellyfinData } = useContext(AppContext);
+    const { jellyfinMovies, fetchJellyfinData, hasMore } = useContext(AppContext);
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
@@ -4120,12 +4075,39 @@ function RootNavigator() {
         </NavigationContainer>
     );
 }
+// 🔥 PANTALLA DE CARGA ANIMADA VERTƎX 🔥
+const AnimatedSplashScreen = () => {
+    const pulseAnim = useRef(new Animated.Value(0.5)).current;
+    useEffect(() => {
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 0.5, duration: 1000, useNativeDriver: true })
+            ])
+        ).start();
+    }, []);
+
+    return (
+        <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+            <StatusBar hidden />
+            <Animated.Text style={{ color: '#c1915f', fontSize: 50, fontWeight: '900', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 5, opacity: pulseAnim }}>
+                VERTƎX
+            </Animated.Text>
+            <ActivityIndicator size="small" color="#c1915f" style={{ marginTop: 20 }} />
+        </View>
+    );
+};
+
 // 🔥 FUNCIÓN ÚNICA DE ENTRADA (APP) 🔥
 export default function App() {
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
             <AppProvider>
-                <RootNavigator />
+                <AppContext.Consumer>
+                    {({ isAppReady }) => (
+                        isAppReady ? <RootNavigator /> : <AnimatedSplashScreen />
+                    )}
+                </AppContext.Consumer>
             </AppProvider>
         </GestureHandlerRootView>
     );
@@ -4239,7 +4221,7 @@ const styles = StyleSheet.create({
     carouselContainer: { marginBottom: 25 },
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     flatListContent: {
-        paddingLeft: 80,
+        paddingLeft: 100, // 🔥 Aumentamos a 100 para que se alinee con el texto Cinehax
         paddingRight: 20,
         gap: 12
     },
