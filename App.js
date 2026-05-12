@@ -1438,7 +1438,7 @@ const LicensesModal = ({ visible, onClose }) => (
 function VideoPlayerScreen({ route, navigation }) {
     const { updateContinueWatching, setShowCastModal, removeFromContinueWatching } = useContext(AppContext);
     // 🔥 Recibimos seriesData
-    const { movie, seriesData, startAt = 0, selectedQuality } = route.params;
+    const { movie, seriesData, startAt = 0, selectedQuality, localUri } = route.params; // 🔥 FIX: Extraemos localUri
 
     const finalJellyfinId = movie?.jellyfin_id || (String(movie?.id).startsWith('jf_') ? String(movie.id).replace('jf_', '') : movie?.id);
 
@@ -1506,8 +1506,9 @@ function VideoPlayerScreen({ route, navigation }) {
     // 🔥 FIX: RESTAURAMOS LA RUTA DEL VIDEO QUE SE HABÍA BORRADO 🔥
     const audioIndex = selectedAudio.value !== undefined ? selectedAudio.value : defaultAudio;
     const subIndex = selectedSub.type === 'disabled' ? -1 : selectedSub.value;
-    const streamUrl = `${BACKEND_URL}/api/video/${finalJellyfinId}/?audio=${audioIndex}&sub=${subIndex}`;
 
+    // 🔥 FIX: Si localUri existe (descarga offline), reproduce desde la memoria del dispositivo. Si no, transmite desde el servidor.
+    const streamUrl = localUri ? localUri : `${BACKEND_URL}/api/video/${finalJellyfinId}/?audio=${audioIndex}&sub=${subIndex}`;
     // 🔥 NUEVO: Obtenemos el pasaporte para que Django no bloquee el video (Error 401) 🔥
     const [videoToken, setVideoToken] = useState(null);
     useEffect(() => {
@@ -3043,7 +3044,8 @@ function MovieDetailsScreen({ route, navigation }) {
     const isMobile = width < 768;
     const { movie } = route.params;
     // 🔥 FIX: Traemos attemptPlay para que no dé error
-    const { user, attemptPlay, setShowVipModal, watchlist, toggleWatchlist, continueWatching, isCasting, connectedTV, setItemToProcess, setModalActionType } = useContext(AppContext);
+    // 🔥 FIX: Importamos startDownloadProcess desde el AppContext
+    const { user, attemptPlay, setShowVipModal, watchlist, toggleWatchlist, continueWatching, isCasting, connectedTV, startDownloadProcess } = useContext(AppContext);
     const isFavorite = watchlist.some(m => m.id === movie.id);
 
     const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -3146,7 +3148,22 @@ function MovieDetailsScreen({ route, navigation }) {
 
     return (
         <View style={[styles.mainScreen, { backgroundColor: '#050505' }]}>
-            <QualitySelectorModal visible={showQualityModal} onClose={() => setShowQualityModal(false)} onSelect={(q) => { setShowQualityModal(false); navigation.navigate('VideoPlayer', { movie: itemToProcessLocal, selectedQuality: q }); }} actionType={modalActionTypeLocal} movie={itemToProcessLocal} />
+            <QualitySelectorModal
+                visible={showQualityModal}
+                onClose={() => setShowQualityModal(false)}
+                onSelect={(q) => {
+                    setShowQualityModal(false);
+                    // 🔥 FIX: Comprobamos si el usuario quería descargar o reproducir
+                    if (modalActionTypeLocal === 'download') {
+                        startDownloadProcess(itemToProcessLocal, q, Platform.OS === 'web');
+                        if (Platform.OS === 'android') ToastAndroid.show("Descarga iniciada en la Bóveda", ToastAndroid.SHORT);
+                    } else {
+                        navigation.navigate('VideoPlayer', { movie: itemToProcessLocal, selectedQuality: q });
+                    }
+                }}
+                actionType={modalActionTypeLocal}
+                movie={itemToProcessLocal}
+            />
 
             <ResumeModal
                 visible={showResumeModal}
