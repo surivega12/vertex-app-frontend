@@ -2029,7 +2029,9 @@ function HomeScreen({ route, navigation }) {
     const novelsOnly = displayData.filter(m => m.type === 'novel');
     const animesOnly = displayData.filter(m => m.type === 'anime');
     const recomendados = displayData.filter(m => parseFloat(m.imdb) >= 7.5);
-    const tendencias = displayData.sort((a, b) => (b.year || 0) - (a.year || 0)).slice(0, 15);
+
+    // 🔥 FIX: Los tres puntitos crean una copia temporal. ¡Esto evita que la app colapse!
+    const tendencias = [...displayData].sort((a, b) => (b.year || 0) - (a.year || 0)).slice(0, 15);
 
     const openMovieDetails = (movieData) => { navigation.navigate('MovieDetails', { movie: movieData }); };
 
@@ -3704,9 +3706,23 @@ function AuthScreen({ navigation }) {
     const isMobile = width < 768;
 
     const [isLoginMode, setIsLoginMode] = useState(true);
+
+    // 👇 AQUÍ PEGAMOS TU CÓDIGO 👇
     const [isLoading, setIsLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+
+    // 🔥 NUEVO: Animación suave para el fondo del Login
+    const pulseAnim = useRef(new Animated.Value(0.1)).current;
+    useEffect(() => {
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, { toValue: 0.3, duration: 3000, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 0.1, duration: 3000, useNativeDriver: true })
+            ])
+        ).start();
+    }, []);
+    // 👆 FIN DE TU CÓDIGO 👆
 
     // 🔥 CONFIGURACIÓN DE GOOGLE CORREGIDA PARA EVITAR CRASH EN ANDROID 🔥
     const [request, response, promptAsync] = Google.useAuthRequest({
@@ -3846,9 +3862,14 @@ function AuthScreen({ navigation }) {
     return (
         <View style={{ flex: 1, backgroundColor: '#050505', justifyContent: 'center', alignItems: 'center' }}>
             <StatusBar barStyle="light-content" />
-            <View style={StyleSheet.absoluteFillObject}>
-                <Image source={{ uri: 'https://image.tmdb.org/t/p/w1280/8rpDcsfLJypbO6vtec04H36xU2I.jpg' }} style={{ width: '100%', height: '100%', opacity: 0.3 }} blurRadius={15} />
-                <LinearGradient colors={['rgba(5,5,5,0.7)', '#050505']} style={StyleSheet.absoluteFillObject} />
+
+            {/* 🔥 NUEVO FONDO ANIMADO VERTƎX GIGANTE 🔥 */}
+            <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }]}>
+                <Animated.Text style={{ color: '#c1915f', fontSize: 130, fontWeight: '900', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 8, opacity: pulseAnim, transform: [{ scale: 1.2 }] }}>
+                    VERTƎX
+                </Animated.Text>
+                {/* Degradado oscuro para que el formulario se lea perfectamente */}
+                <LinearGradient colors={['rgba(5,5,5,0.85)', '#050505']} style={StyleSheet.absoluteFillObject} />
             </View>
 
             <View style={[styles.authContainer, !isMobile && { width: 450, padding: 40 }]}>
