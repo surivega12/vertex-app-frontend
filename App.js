@@ -4068,9 +4068,9 @@ function MainCatalog() {
             screenOptions={{
                 headerShown: false,
                 drawerType: 'permanent',
-                // 🔥 FIX TV: position absolute hace que el menú flote sobre las películas, usando toda la pantalla
-                drawerStyle: { width: 70, backgroundColor: 'transparent', borderRightWidth: 0, position: 'absolute', height: '100%', zIndex: 999 },
-                sceneContainerStyle: { backgroundColor: '#000000' }
+                // 🔥 FIX TV FINAL: Quitamos el "absolute" para que el control remoto de TV detecte los botones al llegar a la izquierda.
+                drawerStyle: { width: 70, backgroundColor: 'transparent', borderRightWidth: 0 },
+                sceneContainerStyle: { backgroundColor: '#050505', marginLeft: -70 } // El margen negativo hace que el fondo abarque toda la pantalla
             }}>
             <Drawer.Screen name="Inicio" component={HomeStackScreen} />
             <Drawer.Screen name="TV en Vivo" component={ReproductorTV} />
