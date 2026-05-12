@@ -446,6 +446,7 @@ export const AppProvider = ({ children }) => {
             if (!response.ok || !moviesData || !moviesData.Items || moviesData.Items.length === 0) {
                 setHasMore(false);
                 setIsLoadingMore(false);
+                if (!isLoadMore) setJellyfinMovies([]); // 🔥 Evitamos que guarde basura
                 return;
             }
 
@@ -2181,7 +2182,7 @@ function HomeScreen({ route, navigation }) {
                                 <LinearGradient colors={['transparent', '#050505']} start={{ x: 0, y: 0.4 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
 
                                 <View style={[StyleSheet.absoluteFill, { justifyContent: 'flex-end', paddingBottom: 40, paddingHorizontal: 20, alignItems: 'center' }]}>
-                                    <Text style={[styles.heroTitle, { fontSize: 32, textAlign: 'center', color: '#fff', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 10, fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 1, marginBottom: 10 }]} numberOfLines={2}>{activeHero.title}</Text>
+                                    <Text style={[styles.heroTitle, { fontSize: 32, textAlign: 'center', color: '#fff', textShadow: '2px 2px 10px rgba(0,0,0,0.9)', fontFamily: Platform.OS === 'ios' ? 'Impact' : 'sans-serif-condensed', letterSpacing: 1, marginBottom: 10 }]} numberOfLines={2}>{activeHero.title}</Text>
 
                                     <View style={[styles.heroTags, { justifyCenter: 'center', marginBottom: 15 }]}>
                                         <Text style={[styles.tagText, { color: '#fff' }]}>{activeHero.year}</Text><Text style={styles.tagDot}> • </Text>
@@ -3717,8 +3718,8 @@ function AuthScreen({ navigation }) {
     useEffect(() => {
         Animated.loop(
             Animated.sequence([
-                Animated.timing(pulseAnim, { toValue: 0.3, duration: 3000, useNativeDriver: true }),
-                Animated.timing(pulseAnim, { toValue: 0.1, duration: 3000, useNativeDriver: true })
+                Animated.timing(pulseAnim, { toValue: 0.3, duration: 3000, useNativeDriver: false }), // 🔥 APAGAMOS EL MOTOR NATIVO
+                Animated.timing(pulseAnim, { toValue: 0.1, duration: 3000, useNativeDriver: false })  // 🔥 AQUÍ TAMBIÉN
             ])
         ).start();
     }, []);
@@ -4377,7 +4378,7 @@ const styles = StyleSheet.create({
     customControlsOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.1)', justifyContent: 'space-between', zIndex: 5 },
 
     playerTopBar: { height: 90, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 25, paddingTop: 25 },
-    playerTopTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', textShadowColor: 'rgba(0, 0, 0, 0.9)', textShadowOffset: { width: -1, height: 1 }, textShadowRadius: 10, marginTop: 10 },
+    playerTopTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', textShadow: '-1px 1px 10px rgba(0, 0, 0, 0.9)', marginTop: 10 },
 
     qualityBadge: { backgroundColor: PREMIUM_GOLD, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, marginLeft: 15, marginTop: 10 },
     qualityBadgeText: { color: '#000', fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
