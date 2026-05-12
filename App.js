@@ -990,7 +990,8 @@ const FocusableMovieCard = ({ movie, isMobile, onPress, onFocusChange, customSty
                     source={{ uri: imgError || !movie.thumb ? movie.tmdbThumb : movie.thumb }}
                     style={styles.posterImage}
                     contentFit="cover"
-                    transition={300}
+                    cachePolicy="memory-disk" // 🔥 FIX: Cache agresivo para que no recargue
+                    transition={0} // 🔥 FIX: Quitamos la animación para que sea instantáneo
                     onError={() => setImgError(true)}
                 />
 
@@ -1050,7 +1051,8 @@ const ContinueWatchingCard = ({ item, onMoviePress, isMobile, onRemove }) => {
                 source={{ uri: imgError || !item.bgImage ? item.tmdbBg : item.bgImage }}
                 style={styles.cwImage}
                 contentFit="cover"
-                transition={300}
+                transition={0}
+                cachePolicy="memory-disk"
                 onError={() => setImgError(true)}
             />
             {isFocused && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(193,145,95,0.2)' }} pointerEvents="none" />}
@@ -1495,8 +1497,9 @@ function VideoPlayerScreen({ route, navigation }) {
 
     const defaultAudio = movie.audioTracks?.find(a => a.isDefault)?.index ?? 0;
     const defaultSub = -1;
-    const [availableAudioTracks, setAvailableAudioTracks] = useState([]);
-    const [availableTextTracks, setAvailableTextTracks] = useState([]);
+    // 🔥 FIX: Leemos los idiomas extraídos previamente de Jellyfin
+    const [availableAudioTracks, setAvailableAudioTracks] = useState(movie.audioTracks || []);
+    const [availableTextTracks, setAvailableTextTracks] = useState(movie.subtitles || []);
     const [selectedAudio, setSelectedAudio] = useState({ type: 'index', value: defaultAudio });
     const [selectedSub, setSelectedSub] = useState({ type: 'disabled' });
 
@@ -1650,8 +1653,6 @@ function VideoPlayerScreen({ route, navigation }) {
     const onLoad = (data) => {
         // 🔥 FIX 4: AJUSTE DE TIEMPO MILISEGUNDOS VS SEGUNDOS
         const durationSecs = Platform.OS === 'web' ? data.duration : data.durationMillis / 1000;
-        if (data.audioTracks && data.audioTracks.length > 0) setAvailableAudioTracks(data.audioTracks);
-        if (data.textTracks && data.textTracks.length > 0) setAvailableTextTracks(data.textTracks);
         setStatus(p => ({ ...p, duration: durationSecs, isBuffering: false }));
 
         if (movie.progress && movie.progress > 0) {
@@ -2553,8 +2554,14 @@ function UserScreen({ navigation }) {
                 text: "Cerrar Sesión",
                 style: "destructive",
                 onPress: async () => {
-                    await SecureStore.deleteItemAsync('vertex_access');
-                    await SecureStore.deleteItemAsync('vertex_refresh');
+                    // 🔥 FIX: Borrado inteligente según la plataforma
+                    if (Platform.OS === 'web') {
+                        await AsyncStorage.removeItem('vertex_access');
+                        await AsyncStorage.removeItem('vertex_refresh');
+                    } else {
+                        await SecureStore.deleteItemAsync('vertex_access');
+                        await SecureStore.deleteItemAsync('vertex_refresh');
+                    }
                     updateUserData({ name: "", vipDays: 0, isVip: false });
                     setIsLoggedIn(false);
                     if (Platform.OS === 'android') ToastAndroid.show("Sesión cerrada correctamente.", ToastAndroid.SHORT);
@@ -2713,7 +2720,7 @@ function UserScreen({ navigation }) {
                     <View style={styles.vipSectionGroup}>
                         <SettingRow icon="speedometer-outline" title="Buffer (Precarga)" subtitle={`${bufferSize / 1000}s Configurado`} onPress={() => setShowBuffer(true)} />
                         <SettingRow icon="wifi-outline" title="Escáner Wi-Fi" subtitle={networkStatus} onPress={scanNetwork} />
-                        <SettingRow icon="battery-charging-outline" title="Optimización de Batería" isSwitch={true} switchValue={batteryOpt} onSwitchChange={setBatteryOpt} />
+                        <SettingRow icon="battery-charging-outline" title="Optimización de Batería" subtitle="Gestionar rendimiento nativo" onPress={() => { if (Platform.OS !== 'web') Linking.openSettings(); else Alert.alert("Aviso", "Ve a los ajustes de tu navegador."); }} />
                     </View>
 
                     <Text style={styles.vipSectionTitle}>ACERCA DE VERTƎX</Text>
