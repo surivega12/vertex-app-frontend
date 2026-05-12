@@ -2174,9 +2174,11 @@ function HomeScreen({ route, navigation }) {
                             <View style={StyleSheet.absoluteFillObject}>
                                 <ExpoImage
                                     key={`bg-${activeHero.id}`}
-                                    source={{ uri: activeHero.bgImage || activeHero.thumb }}
+                                    // 🔥 FIX MÓVIL: Usamos el póster vertical para que encaje perfecto y centrado
+                                    source={{ uri: activeHero.thumb || activeHero.tmdbThumb || activeHero.bgImage }}
                                     style={StyleSheet.absoluteFillObject}
                                     contentFit="cover"
+                                    transition={500}
                                 />
                                 <LinearGradient colors={['#000', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.3 }} style={StyleSheet.absoluteFillObject} />
                                 <LinearGradient colors={['transparent', '#050505']} start={{ x: 0, y: 0.4 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
@@ -3475,61 +3477,52 @@ function HistoryScreen({ navigation }) {
 // --- 5. NAVEGADORES (VERSIÓN TV PREMIUM MINIMALISTA Y TRANSPARENTE) ---
 function CustomDrawerContent(props) {
     const currentRoute = props.state?.routeNames[props.state.index];
-    const { user, attemptPlay, setShowVipModal, watchlist, toggleWatchlist } = useContext(AppContext);
+    const { user } = useContext(AppContext);
 
     return (
-        <View style={styles.drawerGlass}>
-            <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={{ flex: 1, backgroundColor: 'transparent', paddingTop: 40, alignItems: 'center' }}>
+            {/* Avatar súper minimalista */}
+            <View style={{ marginBottom: 40 }}>
+                <Image
+                    source={{ uri: user?.photo || 'https://ui-avatars.com/api/?name=Ǝ&background=c1915f&color=000&bold=true' }}
+                    style={{ width: 40, height: 40, borderRadius: 12, borderWidth: 1.5, borderColor: '#c1915f' }}
+                />
+            </View>
 
-            <View style={{ paddingTop: 30, flex: 1, overflow: 'hidden' }}>
-                <View style={styles.drawerAvatarContainer}>
-                    {/* AHORA USA EL AVATAR Y NOMBRE REAL DEL USUARIO */}
-                    <Image source={{ uri: user?.photo || 'https://ui-avatars.com/api/?name=Ǝ&background=c1915f&color=000&bold=true' }} style={styles.drawerAvatar} />
-                    <Text style={styles.drawerUserName} numberOfLines={1}>{user?.name || 'Invitado'}</Text>
-                </View>
-
-                <View style={{ width: '100%', gap: 10 }}>
-                    <DrawerItem icon="home-variant" label="Inicio" focused={currentRoute === 'Inicio'} onPress={() => props.navigation.navigate('Inicio')} />
-                    <DrawerItem icon="television-play" label="TV en Vivo" focused={currentRoute === 'TV en Vivo'} onPress={() => props.navigation.navigate('TV en Vivo')} />
-                    <DrawerItem icon="movie-play-outline" label="Películas" focused={currentRoute === 'Películas'} onPress={() => props.navigation.navigate('Películas')} />
-                    <DrawerItem icon="television-classic" label="Series" focused={currentRoute === 'Serie'} onPress={() => props.navigation.navigate('Serie')} />
-                    <DrawerItem icon="heart-outline" label="Novelas" focused={currentRoute === 'Novelas'} onPress={() => props.navigation.navigate('Novelas')} />
-                    <DrawerItem icon="palette-outline" label="Animes" focused={currentRoute === 'Animes'} onPress={() => props.navigation.navigate('Animes')} />
-                    <View style={{ height: 15 }} />
-                    <DrawerItem icon="compass-outline" label="Descubrir" focused={currentRoute === 'Buscar'} onPress={() => props.navigation.navigate('Buscar')} />
-                    <DrawerItem icon="account-circle-outline" label="Usuario" focused={currentRoute === 'Usuario'} onPress={() => props.navigation.navigate('Usuario')} />
-                </View>
+            <View style={{ gap: 22, width: '100%', alignItems: 'center' }}>
+                <DrawerItem icon="home-variant" focused={currentRoute === 'Inicio'} onPress={() => props.navigation.navigate('Inicio')} />
+                <DrawerItem icon="television-play" focused={currentRoute === 'TV en Vivo'} onPress={() => props.navigation.navigate('TV en Vivo')} />
+                <DrawerItem icon="movie-play-outline" focused={currentRoute === 'Películas'} onPress={() => props.navigation.navigate('Películas')} />
+                <DrawerItem icon="television-classic" focused={currentRoute === 'Serie'} onPress={() => props.navigation.navigate('Serie')} />
+                <DrawerItem icon="heart-outline" focused={currentRoute === 'Novelas'} onPress={() => props.navigation.navigate('Novelas')} />
+                <DrawerItem icon="palette-outline" focused={currentRoute === 'Animes'} onPress={() => props.navigation.navigate('Animes')} />
+                <View style={{ height: 15 }} />
+                <DrawerItem icon="compass-outline" focused={currentRoute === 'Buscar'} onPress={() => props.navigation.navigate('Buscar')} />
+                <DrawerItem icon="account-circle-outline" focused={currentRoute === 'Usuario'} onPress={() => props.navigation.navigate('Usuario')} />
             </View>
         </View>
     );
 }
 
-const DrawerItem = ({ icon, label, focused, onPress }) => {
+const DrawerItem = ({ icon, focused, onPress }) => {
     const [isFocused, setIsFocused] = useState(false);
+    const active = focused || isFocused;
 
     return (
         <Pressable
             onPress={onPress}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            focusable={true}
-            style={[
-                styles.drawerItemPill,
-                focused && styles.drawerItemActive,
-                isFocused && { backgroundColor: 'rgba(255,255,255,0.15)', transform: [{ scale: 1.05 }] }
-            ]}
+            style={{ padding: 10, alignItems: 'center', justifyContent: 'center' }}
         >
             <MaterialCommunityIcons
                 name={icon}
-                size={24}
-                color={focused || isFocused ? PREMIUM_GOLD : "#888"}
+                size={28}
+                color={active ? '#ffffff' : '#555555'}
+                style={isFocused && { transform: [{ scale: 1.15 }] }}
             />
-            <Text style={[
-                styles.drawerItemLabel,
-                { color: focused || isFocused ? '#fff' : '#888', fontWeight: isFocused ? '900' : '600' }
-            ]}>
-                {label}
-            </Text>
+            {/* Pequeño punto dorado indicador de sección activa */}
+            {focused && <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: '#c1915f', position: 'absolute', bottom: 0 }} />}
         </Pressable>
     );
 };
@@ -4075,7 +4068,8 @@ function MainCatalog() {
             screenOptions={{
                 headerShown: false,
                 drawerType: 'permanent',
-                drawerStyle: { width: 50, backgroundColor: 'transparent', borderRightWidth: 0 },
+                // 🔥 FIX TV: position absolute hace que el menú flote sobre las películas, usando toda la pantalla
+                drawerStyle: { width: 70, backgroundColor: 'transparent', borderRightWidth: 0, position: 'absolute', height: '100%', zIndex: 999 },
                 sceneContainerStyle: { backgroundColor: '#000000' }
             }}>
             <Drawer.Screen name="Inicio" component={HomeStackScreen} />
