@@ -297,6 +297,7 @@ export const AppProvider = ({ children }) => {
 
     const [isAppReady, setIsAppReady] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true); // 🔥 NUEVO: Freno para el scroll infinito
 
     // 🔥 AÑADE ESTA LÍNEA AQUÍ 🔥
     const [isOfflineMode, setIsOfflineMode] = useState(false);
@@ -363,6 +364,14 @@ export const AppProvider = ({ children }) => {
                                 }));
                                 setIsLoggedIn(true);
                             } else {
+                                // 🔥 FIX DE SEGURIDAD: Si Django rechaza la llave (Error 401), la borramos para obligar a regenerarla
+                                if (Platform.OS === 'web') {
+                                    await AsyncStorage.removeItem('vertex_access');
+                                    await AsyncStorage.removeItem('vertex_refresh');
+                                } else {
+                                    await SecureStore.deleteItemAsync('vertex_access');
+                                    await SecureStore.deleteItemAsync('vertex_refresh');
+                                }
                                 setIsLoggedIn(false);
                             }
                         } catch (e) { setIsLoggedIn(false); }
@@ -432,12 +441,15 @@ export const AppProvider = ({ children }) => {
             });
             const moviesData = await response.json();
 
-            // 🛡️ ESCUDO ANTI-CRASH: Si Django devuelve error o no hay 'Items', detenemos la ejecución silenciosamente
-            if (!response.ok || !moviesData || !moviesData.Items) {
-                console.log("Esperando autorización o el catálogo está vacío...");
+            // 🛡️ ESCUDO ANTI-CRASH MEJORADO
+            if (!response.ok || !moviesData || !moviesData.Items || moviesData.Items.length === 0) {
+                setHasMore(false); // 🔥 Le decimos a la app que ya no hay más contenido en Jellyfin
                 setIsLoadingMore(false);
                 return;
             }
+
+            // Si es la primera carga y hay resultados, reseteamos el freno
+            if (!isLoadMore) setHasMore(true);
 
             // 🔥 FIX: Usamos un placeholder más estable y con diseño acorde a VERTƎX
             const fallbackBg = "https://placehold.co/500x750/111111/c1915f/png?text=VERT%C6%8EX";
@@ -514,9 +526,9 @@ export const AppProvider = ({ children }) => {
                 const pathString = item.Path ? item.Path.toLowerCase() : "";
                 const titleString = finalCleanTitle.toLowerCase();
 
-                // 🔥 BÚSQUEDA MÁS AGRESIVA: Ignora las barras (/) o (\) de Windows/Linux
-                const isAnime = pathString.includes("anime") || genresString.includes("anime") || tagsString.includes("anime");
-                const isNovel = pathString.includes("novela") || genresString.includes("novela") || tagsString.includes("novela") || pathString.includes("dorama");
+                // 🔥 FIX: Categorización blindada usando solo Géneros y Etiquetas (Ignoramos el Path que puede venir vacío)
+                const isAnime = genresString.includes("anime") || tagsString.includes("anime");
+                const isNovel = genresString.includes("novela") || tagsString.includes("novela") || genresString.includes("dorama") || tagsString.includes("dorama");
 
                 const isAnimacion = genresString.includes("animación") || genresString.includes("animacion") || genresString.includes("family") || genresString.includes("kids") || isAnime || genresString.includes("animation");
 
@@ -3368,29 +3380,34 @@ function CategoryScreen({ route, navigation }) {
     const baseData = getBaseMovies();
 
     const getFilteredData = () => {
+        // 🔥 FIX 1: Si es "Recientes" o "Todas", simplemente devolvemos la base sin filtrar más.
         if (activeTab === "Recientes" || activeTab === "Todas") return baseData;
+
         if (activeTab === "Recomendadas") return baseData.filter(m => parseFloat(m.imdb) >= 8.0);
         if (activeTab === "4K") return baseData.filter(m => m.qualities && m.qualities.includes("4K UHD"));
         if (activeTab === "IMAX") return baseData.filter(m => m.title.includes("IMAX"));
         if (activeTab === "Animación") return baseData.filter(m => m.isAnimacion || m.isAnime);
+
         if (category === 'Novelas') {
             if (activeTab === "Asiáticas") return baseData.filter(m => m.genres.includes("K-Drama") || m.genres.includes("Asiática") || m.overview.toLowerCase().includes("corea") || m.overview.toLowerCase().includes("japón"));
             if (activeTab === "Latinas") return baseData.filter(m => m.genres.includes("Latina") || m.overview.toLowerCase().includes("méxico") || m.overview.toLowerCase().includes("colombia"));
         }
+
+        // 🔥 FIX 2: Si el usuario seleccionó un género específico, filtramos por él.
         return baseData.filter(m => m.genres && m.genres.includes(activeTab));
     };
 
     const displayData = getFilteredData();
     const openMovieDetails = (movieData) => { navigation.navigate('MovieDetails', { movie: movieData }); };
 
-    // 🔥 MAGIA: Detectar si el usuario llegó al final de la pantalla
     const handleScroll = async (event) => {
         const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-        const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 400; // 400px antes de llegar al fin
+        const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 400;
 
-        if (isCloseToBottom && !isLoadingMore) {
+        // 🔥 FIX: Solo pide más películas si no está cargando Y si todavía quedan películas (hasMore)
+        if (isCloseToBottom && !isLoadingMore && hasMore) {
             setIsLoadingMore(true);
-            await fetchJellyfinData(true); // Pide las siguientes 100 películas
+            await fetchJellyfinData(true);
             setIsLoadingMore(false);
         }
     };
