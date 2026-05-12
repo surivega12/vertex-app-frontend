@@ -466,6 +466,7 @@ export const AppProvider = ({ children }) => {
                 const tmdbPoster = tmdbId ? `https://image.tmdb.org/t/p/original/${tmdbId}.jpg` : null;
                 const tmdbBg = tmdbId ? `https://image.tmdb.org/t/p/original/${tmdbId}.jpg` : null;
 
+
                 const director = item.People?.find(p => p.Type === 'Director')?.Name || 'Desconocido';
                 const studio = item.Studios?.length > 0 ? item.Studios[0].Name : 'Desconocido';
 
