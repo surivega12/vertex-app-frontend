@@ -735,6 +735,7 @@ export const AppProvider = ({ children }) => {
     // 10. EXPORTACIÓN DEL CEREBRO
     return (
         <AppContext.Provider value={{
+            isAppReady, setIsAppReady, // 🔥 EL CABLE FALTANTE QUE DESBLOQUEA LA APP
             isLoggedIn, setIsLoggedIn,
             isOfflineMode, // 🔥 NUEVO
             watchlist, toggleWatchlist,
