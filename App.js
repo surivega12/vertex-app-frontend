@@ -380,9 +380,14 @@ export const AppProvider = ({ children }) => {
             } catch (e) {
                 console.log("Error inicializando app", e);
             } finally {
-                // 3. ¡TODO LISTO! Quitamos la pantalla de carga
-                setIsAppReady(true);
-                await SplashScreen.hideAsync();
+                // 3. ¡TODO LISTO! Transición suave a la app
+                setTimeout(() => {
+                    setIsAppReady(true);
+                }, 1500); // 1.5 segundos para apreciar la animación
+
+                try {
+                    await SplashScreen.hideAsync();
+                } catch (err) { } // Prevenimos error si Expo ya lo ocultó
             }
         };
         initApp();
