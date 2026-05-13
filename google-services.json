@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "64765255627",
+    "project_id": "vertex-stream-9caa2",
+    "storage_bucket": "vertex-stream-9caa2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:64765255627:android:df65be621cb65a9573e04e",
+        "android_client_info": {
+          "package_name": "com.suriyamki.vertex"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB_xxKLI8G1yUd2dGMjWo-l7ojx4Hy1kds"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

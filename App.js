@@ -18,8 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store'; // 🔥 FIX: Bóveda de encriptación militar
 import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
-import { makeRedirectUri } from 'expo-auth-session';
+import { GoogleSignin, GoogleSigninButton, statusCodes } from '@react-native-google-signin/google-signin';
 // 🔥 NUEVO: Triada de tareas y escudo Anti-Sueño
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
@@ -92,7 +91,9 @@ if (Platform.OS === 'web') {
     `;
     document.head.append(style);
 }
-
+GoogleSignin.configure({
+    webClientId: '375847819247-jllcfo7ab2asnl7849fgek61fdjdga81.apps.googleusercontent.com',
+});
 // ==========================================
 // CONSTANTES Y VARIABLES GLOBALES
 // ==========================================
@@ -189,11 +190,13 @@ function ReproductorTV({ route, navigation }) {
     useEffect(() => {
         if (stream_url && Platform.OS !== 'web') {
             ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+            activateKeepAwakeAsync(); // 🔥 Mantiene la pantalla encendida
         }
 
         return () => {
             if (Platform.OS !== 'web') {
                 ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+                deactivateKeepAwake(); // 🔥 Permite que se apague al salir
             }
         };
     }, [stream_url]);
@@ -398,37 +401,7 @@ export const AppProvider = ({ children }) => {
     useEffect(() => { if (isAppReady) AsyncStorage.setItem('vertex_dl', JSON.stringify(completedDownloads)); }, [completedDownloads, isAppReady]);
 
     const attemptPlay = async (movie, proceedToPlay) => {
-        // Si es VIP, pasa directo sin gastar créditos
-        if (user.isVip || user.vipDays > 0) {
-            proceedToPlay();
-            return;
-        }
-
-        // LÓGICA FREEMIUM: 5 Videos diarios
-        const today = new Date().toDateString();
-        let currentHistory = { ...dailyHistory };
-        if (currentHistory.date !== today) currentHistory = { date: today, watched: [] };
-
-        const finalId = movie.jellyfin_id || movie.id;
-
-        // Si ya vio este video hoy, lo dejamos pasar gratis
-        if (currentHistory.watched.includes(finalId)) {
-            proceedToPlay();
-            return;
-        }
-
-        // Si ya vio 5 videos diferentes hoy, sale el muro de pago
-        if (currentHistory.watched.length >= 5) {
-            setShowVipModal(true);
-            return;
-        }
-
-        // Si tiene saldo, le restamos 1 y guardamos
-        const newWatched = [...currentHistory.watched, finalId];
-        const updatedHistory = { date: today, watched: newWatched };
-        setDailyHistory(updatedHistory);
-        await AsyncStorage.setItem('vertex_daily', JSON.stringify(updatedHistory));
-
+        // 🔥 VERTƎX LIBRE: App totalmente liberada, sin límites de videos diarios.
         proceedToPlay();
     };
 
@@ -553,9 +526,12 @@ export const AppProvider = ({ children }) => {
             }
         } catch (error) { console.log("Error cargando Jellyfin:", error); }
     };
+    // 🔥 FIX: Solo cargar el catálogo DESPUÉS de que el usuario esté validado
     useEffect(() => {
-        fetchJellyfinData();
-    }, []);
+        if (isLoggedIn) {
+            fetchJellyfinData();
+        }
+    }, [isLoggedIn]);
 
     // 3. ESTADOS DE DESCARGA
     const [activeDownloads, setActiveDownloads] = useState({});
@@ -608,26 +584,7 @@ export const AppProvider = ({ children }) => {
     const startDownloadProcess = async (movie, qualityStr, isWeb = false) => {
         setShowDataModal(false);
 
-        // 🔥 LÍMITE DE 5 DESCARGAS DIARIAS PARA USUARIOS GRATIS 🔥
-        if (!user.isVip && user.vipDays <= 0) {
-            const dlHistory = await AsyncStorage.getItem('vertex_daily_dl');
-            let parsedDl = dlHistory ? JSON.parse(dlHistory) : { date: new Date().toDateString(), count: 0 };
-
-            // Si es un nuevo día, reseteamos a 0
-            if (parsedDl.date !== new Date().toDateString()) {
-                parsedDl = { date: new Date().toDateString(), count: 0 };
-            }
-
-            // Si ya descargó 5 hoy, le mostramos el cartel VIP y bloqueamos la descarga
-            if (parsedDl.count >= 5) {
-                setShowVipModal(true);
-                return;
-            }
-
-            // Le sumamos 1 al conteo y lo guardamos
-            parsedDl.count += 1;
-            await AsyncStorage.setItem('vertex_daily_dl', JSON.stringify(parsedDl));
-        }
+        // 🔥 VERTƎX LIBRE: Sin límites de descarga diaria para captar usuarios en Facebook.
 
         const downloadId = movie.id.toString();
 
@@ -748,6 +705,7 @@ export const AppProvider = ({ children }) => {
             activeDownloads, setActiveDownloads,
             downloadQueue, setDownloadQueue,
             jellyfinMovies, fetchJellyfinData,
+            hasMore, setHasMore, // 🔥 FIX: Exportamos el freno del scroll infinito
             isCasting, setIsCasting,
             connectedTV, setConnectedTV,
             showCastModal, setShowCastModal,
@@ -990,8 +948,9 @@ const FocusableMovieCard = ({ movie, isMobile, onPress, onFocusChange, customSty
                     source={{ uri: imgError || !movie.thumb ? movie.tmdbThumb : movie.thumb }}
                     style={styles.posterImage}
                     contentFit="cover"
-                    cachePolicy="memory-disk" // 🔥 FIX: Cache agresivo para que no recargue
-                    transition={0} // 🔥 FIX: Quitamos la animación para que sea instantáneo
+                    cachePolicy="memory-disk"
+                    priority="high" // 🔥 TRUCO DE VELOCIDAD: Carga prioritaria al procesador
+                    transition={0}
                     onError={() => setImgError(true)}
                 />
 
@@ -2027,10 +1986,10 @@ function HomeScreen({ route, navigation }) {
     // 🔥 CEREBRO VISUAL: En TV muestra lo que enfocas, en móvil el carrusel normal
     const activeHero = (!isMobile && tvFocusedMovie) ? tvFocusedMovie : (topHeroMovies[heroIndex] || topHeroMovies[0]);
 
-    const moviesOnly = displayData.filter(m => m.type === 'movie');
-    const seriesOnly = displayData.filter(m => m.type === 'series');
-    const novelsOnly = displayData.filter(m => m.type === 'novel');
-    const animesOnly = displayData.filter(m => m.type === 'anime');
+    const moviesOnly = displayData.filter(m => m.type === 'movie' && !m.isAnime && !m.isNovel);
+    const seriesOnly = displayData.filter(m => m.type === 'series' && !m.isAnime && !m.isNovel);
+    const novelsOnly = displayData.filter(m => m.isNovel);
+    const animesOnly = displayData.filter(m => m.isAnime);
     const recomendados = displayData.filter(m => parseFloat(m.imdb) >= 7.5);
 
     // 🔥 FIX: Los tres puntitos crean una copia temporal. ¡Esto evita que la app colapse!
@@ -2325,16 +2284,15 @@ function SearchScreen({ route, navigation }) {
                 const thumbUrl = hasPrimary ? `${BACKEND_URL}/api/imagen/${item.Id}/Primary/` : null;
                 const bgUrl = hasBackdrop ? `${BACKEND_URL}/api/imagen/${item.Id}/Backdrop/` : thumbUrl;
 
-                // ⚠️ EL GRAN FIX 2: Reemplazar el TMDB fallido y prevenir CRASHES
-                const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TmdbMovie || item.ProviderIds?.TmdbSeries || item.ProviderIds?.TmdbEpisode;
-                const tmdbPoster = tmdbId ? `https://image.tmdb.org/t/p/w500/${tmdbId}.jpg` : null;
-                const tmdbBg = tmdbId ? `https://image.tmdb.org/t/p/w1280/${tmdbId}.jpg` : null;
+                // 🔥 FIX: Reemplazar el TMDB fallido para prevenir CRASHES en el buscador
+                const fallbackThumb = "https://placehold.co/500x750/111111/c1915f/png?text=VERT%C6%8EX";
+                const fallbackBg = "https://placehold.co/1280x720/111111/c1915f/png?text=VERT%C6%8EX";
 
                 return {
                     id: item.Id, jellyfin_id: item.Id, title: item.Name,
                     year: item.ProductionYear || 'N/A', overview: item.Overview || 'Sin sinopsis.',
-                    thumb: thumbUrl || tmdbPoster || "https://placehold.co/500x750/111111/c1915f/png?text=VERT%C6%8EX",
-                    bgImage: bgUrl || tmdbBg || "https://placehold.co/1280x720/111111/c1915f/png?text=VERT%C6%8EX",
+                    thumb: thumbUrl || fallbackThumb,
+                    bgImage: bgUrl || fallbackBg,
                     type: item.Type?.toLowerCase() === 'series' ? 'series' : 'movie',
                     imdb: item.CommunityRating ? item.CommunityRating.toFixed(1) : '5.0',
                     genres: item.Genres?.join(' • ') || 'Premium',
@@ -2671,8 +2629,8 @@ function UserScreen({ navigation }) {
 
             <ScrollView style={styles.mainScreen} contentContainerStyle={{ paddingBottom: 120, paddingTop: 20 }} showsVerticalScrollIndicator={false}>
 
-                {/* 1. CABECERA: Si está logueado ve su perfil, si no, botón Google */}
-                {isLoggedIn ? (
+                {/* 1. CABECERA: Diferenciamos al usuario real del invitado */}
+                {isLoggedIn && user.email !== 'invitado@vertex.com' ? (
                     <View style={styles.vipProfileHeader}>
                         <TouchableOpacity style={styles.vipAvatarContainer} onPress={() => setShowEditProfile(true)}>
                             <View style={styles.vipAvatarGlow}>
@@ -2701,7 +2659,7 @@ function UserScreen({ navigation }) {
 
                 {/* 2. AJUSTES: Siempre visibles para todos */}
                 <View style={[styles.settingsContainer, !isMobile && { width: '60%', alignSelf: 'center' }]}>
-                    {isLoggedIn && (
+                    {isLoggedIn && user.email !== 'invitado@vertex.com' && (
                         <TouchableOpacity style={styles.vipActionButton} onPress={() => setShowRewardsModal(true)}>
                             <Ionicons name="gift" size={26} color={PREMIUM_GOLD} style={{ marginRight: 15 }} />
                             <View style={{ flex: 1 }}>
@@ -2730,7 +2688,7 @@ function UserScreen({ navigation }) {
                         <SettingRow icon="lock-closed-outline" title="Privacidad" onPress={() => setShowPrivacy(true)} />
                     </View>
 
-                    {isLoggedIn && (
+                    {isLoggedIn && user.email !== 'invitado@vertex.com' && (
                         <TouchableOpacity style={styles.vipLogoutBtn} onPress={handleLogout}>
                             <Text style={styles.vipLogoutBtnText}>CERRAR SESIÓN</Text>
                         </TouchableOpacity>
@@ -3085,7 +3043,8 @@ function MovieDetailsScreen({ route, navigation }) {
 
     const fetchRealEpisodes = async () => {
         try {
-            const token = await AsyncStorage.getItem('vertex_access');
+            // 🔥 FIX: Leer el token de forma segura según la plataforma
+            const token = Platform.OS === 'web' ? await AsyncStorage.getItem('vertex_access') : await SecureStore.getItemAsync('vertex_access');
             const res = await fetch(`${BACKEND_URL}/api/episodios/${movie.jellyfin_id}/`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -3453,7 +3412,9 @@ function CategoryScreen({ route, navigation }) {
                     </View>
                 ) : (
                     displayData.length > 0 ? (
-                        <FilteredGridView movies={displayData} onMoviePress={openMovieDetails} isMobile={isMobile} />
+                        <View style={{ paddingLeft: isMobile ? 0 : 80 }}>
+                            <FilteredGridView movies={displayData} onMoviePress={openMovieDetails} isMobile={isMobile} />
+                        </View>
                     ) : (
                         <View style={{ padding: 40, alignItems: 'center', marginTop: 30 }}>
                             <Ionicons name="film-outline" size={50} color="#333" />
@@ -3754,64 +3715,45 @@ function AuthScreen({ navigation }) {
     }, []);
     // 👆 FIN DE TU CÓDIGO 👆
 
-    // 🔥 CONFIGURACIÓN DE GOOGLE CORREGIDA PARA EVITAR CRASH EN ANDROID 🔥
-    const [request, response, promptAsync] = Google.useAuthRequest({
-        webClientId: '375847819247-jllcfo7ab2asnl7849fgek61fdjdga81.apps.googleusercontent.com',
-        androidClientId: '375847819247-6mb43urau0otdtod7unjaora090r59ll.apps.googleusercontent.com',
-        redirectUri: makeRedirectUri({
-            scheme: 'com.yamki0.premiumstreamapp' // Asegúrate de que coincida con tu app.json
-        }),
-    });
-    // Escuchador de la respuesta de Google
-    useEffect(() => {
-        if (response?.type === 'success') {
-            const { authentication } = response;
-            handleGoogleLogin(authentication.accessToken);
+    const handleGoogleSignIn = async () => {
+        // 🔥 FIX WEB: Evitamos que el navegador intente usar el motor de Android
+        if (Platform.OS === 'web') {
+            alert("El inicio de sesión con Google funciona nativamente en la app móvil. Por ahora en la web, usa correo y contraseña.");
+            return;
         }
-    }, [response]);
 
-    const handleGoogleLogin = async (token) => {
         setIsLoading(true);
         try {
-            // 1. Le pedimos a Google los datos reales del usuario usando su llave
-            const response = await fetch('https://www.googleapis.com/userinfo/v2/me', {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            const googleUser = await response.json();
+            await GoogleSignin.hasPlayServices();
+            const userInfo = await GoogleSignin.signIn();
+            const { email, name, id } = userInfo.user;
 
-            // 2. Extraemos el correo y el nombre de la cuenta de Google
-            const { email, name, id } = googleUser;
-
-            // 3. Creamos una "contraseña maestra" encriptada basada en su ID único de Google
-            // (Esto es un truco maestro si tu Django no tiene un endpoint especial para Google)
             const secureGooglePassword = `GAuth_${id}_V3RT3X!`;
-            const safeUsername = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') + Math.floor(Math.random() * 100);
 
-            // 4. Intentamos hacer Login normal en Django
             const loginRes = await fetch(`${BACKEND_URL}/api/login/`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: email, password: secureGooglePassword })
             });
 
             if (loginRes.ok) {
-                // Ya estaba registrado con Google antes, entra directo (Auto-Login)
                 await executeLogin(email, secureGooglePassword);
             } else {
-                // Es la primera vez que entra con Google, lo registramos automáticamente en Django
+                const safeUsername = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') + Math.floor(Math.random() * 100);
                 const regRes = await fetch(`${BACKEND_URL}/api/registro/`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username: safeUsername, email: email, password: secureGooglePassword, first_name: name })
                 });
 
-                const regData = await regRes.json();
-                if (regRes.ok || regData.status === "success") {
+                if (regRes.ok) {
                     await executeLogin(email, secureGooglePassword);
                 } else {
-                    Alert.alert("Error de Sincronización", "No pudimos crear tu cuenta en VERTƎX.");
+                    Alert.alert("Error", "No pudimos crear tu cuenta con Google.");
                 }
             }
-        } catch (e) {
-            Alert.alert("Error de Conexión", "No pudimos comunicarnos con Google.");
+        } catch (error) {
+            if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
+                Alert.alert("Aviso", "Conexión cancelada o fallida con Google Play Services.");
+            }
         } finally {
             setIsLoading(false);
         }
@@ -3926,17 +3868,27 @@ function AuthScreen({ navigation }) {
                         {isLoading ? <ActivityIndicator color="#000" /> : <Text style={styles.authBtnPrimaryText}>{isLoginMode ? 'ENTRAR' : 'REGISTRARSE'}</Text>}
                     </TouchableOpacity>
 
-                    {/* 🔥 THE NEW GOOGLE BUTTON GOES HERE 🔥 */}
+                    {/* 🔥 BOTÓN HÍBRIDO DE GOOGLE 🔥 */}
                     <Text style={{ color: '#666', fontSize: 12, marginVertical: 15, textAlign: 'center', fontWeight: 'bold' }}>O INGRESA RÁPIDO CON</Text>
 
-                    <TouchableOpacity
-                        style={styles.googleBtn}
-                        disabled={!request}
-                        onPress={() => promptAsync()}
-                    >
-                        <Ionicons name="logo-google" size={20} color="#fff" />
-                        <Text style={styles.googleBtnText}>Continuar con Google</Text>
-                    </TouchableOpacity>
+                    {Platform.OS !== 'web' ? (
+                        <GoogleSigninButton
+                            style={{ width: '100%', height: 55, marginTop: 5 }}
+                            size={GoogleSigninButton.Size.Wide}
+                            color={GoogleSigninButton.Color.Dark}
+                            onPress={handleGoogleSignIn}
+                            disabled={isLoading}
+                        />
+                    ) : (
+                        <TouchableOpacity
+                            style={styles.googleBtn}
+                            disabled={isLoading}
+                            onPress={handleGoogleSignIn}
+                        >
+                            <Ionicons name="logo-google" size={20} color="#fff" />
+                            <Text style={styles.googleBtnText}>Continuar con Google</Text>
+                        </TouchableOpacity>
+                    )}
 
                 </View>
 
@@ -4092,9 +4044,19 @@ function MainCatalog() {
             screenOptions={{
                 headerShown: false,
                 drawerType: 'permanent',
-                // 🔥 FIX TV FINAL: Quitamos el "absolute" para que el control remoto de TV detecte los botones al llegar a la izquierda.
-                drawerStyle: { width: 70, backgroundColor: 'transparent', borderRightWidth: 0 },
-                sceneContainerStyle: { backgroundColor: '#050505', marginLeft: -70 } // El margen negativo hace que el fondo abarque toda la pantalla
+                // 🔥 FIX: Barra lateral flotante y 100% transparente para que no corte los pósters
+                drawerStyle: {
+                    width: 70,
+                    backgroundColor: 'transparent',
+                    borderRightWidth: 0,
+                    position: 'absolute', // Hace que la barra flote como un fantasma sobre la app
+                    left: 0,
+                    top: 0,
+                    bottom: 0
+                },
+                sceneContainerStyle: {
+                    backgroundColor: 'transparent' // Eliminamos el fondo negro de la escena
+                }
             }}>
             <Drawer.Screen name="Inicio" component={HomeStackScreen} />
             <Drawer.Screen name="TV en Vivo" component={ReproductorTV} />
